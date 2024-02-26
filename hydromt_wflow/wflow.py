@@ -2288,12 +2288,18 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     "kin",
                     "press_msl",
                 ]
+            elif pet_method == "hargreaves":
+                variables += [
+                    "temp_min",
+                    "temp_max"
+                ]
             else:
                 methods = [
                     "debruin",
                     "makking",
                     "penman-monteith_rh_simple",
                     "penman-monteith_tdew",
+                    "hargreaves"
                 ]
                 raise ValueError(
                     f"Unknown pet method {pet_method}, select from {methods}"
