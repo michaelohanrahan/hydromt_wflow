@@ -2296,7 +2296,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             else:
                 methods = [
                     "debruin",
-                    "makking",
+                    "makkink",
                     "penman-monteith_rh_simple",
                     "penman-monteith_tdew",
                     "hargreaves"
@@ -2313,6 +2313,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             variables=variables,
             single_var_as_array=False,  # always return dataset
         )
+        
         if chunksize is not None:
             ds = ds.chunk({"time": chunksize})
 
