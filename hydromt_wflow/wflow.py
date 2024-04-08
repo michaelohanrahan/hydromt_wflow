@@ -3100,21 +3100,25 @@ see https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offs
                         "Netcdf forcing file from input.path_forcing in the TOML  "
                         "already exists, using default name."
                     )
+                    
                     sourceP = ""
                     sourceT = ""
                     methodPET = ""
+                    
                     if "precip" in self.forcing:
                         val = self.forcing["precip"].attrs.get("precip_clim_fn", None)
                         Pdown = "d" if val is not None else ""
                         val = self.forcing["precip"].attrs.get("precip_fn", None)
                         if val is not None:
                             sourceP = f"_{val}{Pdown}"
+                            
                     if "temp" in self.forcing:
                         val = self.forcing["temp"].attrs.get("temp_correction", "False")
                         Tdown = "d" if val == "True" else ""
                         val = self.forcing["temp"].attrs.get("temp_fn", None)
                         if val is not None:
                             sourceT = f"_{val}{Tdown}"
+                            
                     if "pet" in self.forcing:
                         val = self.forcing["pet"].attrs.get("pet_method", None)
                         if val is not None:
@@ -3122,7 +3126,9 @@ see https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offs
                     fn_default = (
                         f"inmaps{sourceP}{sourceT}{methodPET}_{freq}_{yr0}_{yr1}.nc"
                     )
+                    
                     fn_default_path = join(self.root, fn_default)
+                    
                     if isfile(fn_default_path):
                         self.logger.warning(
                             "Netcdf default forcing file already exists, \
