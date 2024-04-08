@@ -2308,26 +2308,15 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 raise ValueError(
                     f"Unknown pet method {pet_method}, select from {methods}"
                 )
-        
-        #NEW: allowing for the input of a dataset
-        if not isinstance(temp_pet_fn, xr.Dataset):    
-            ds = self.data_catalog.get_rasterdataset(
-                temp_pet_fn,
-                geom=self.region,
-                buffer=1,
-                time_tuple=(starttime, endtime),
-                variables=variables,
-                single_var_as_array=False,  # always return dataset
-            )
-        #Checking that the necessary variables are present in the dataset
-        elif set(variables).issubset(temp_pet_fn.variables):
-            ds = temp_pet_fn
-            
-        else: 
-            raise ValueError(
-                f"input does not contain all necessary variables: {variables}"
-            )
-            
+
+        ds = self.data_catalog.get_rasterdataset(
+            temp_pet_fn,
+            geom=self.region,
+            buffer=1,
+            time_tuple=(starttime, endtime),
+            variables=variables,
+            single_var_as_array=False,  # always return dataset
+        )
         if chunksize is not None:
             ds = ds.chunk({"time": chunksize})
 
