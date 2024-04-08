@@ -2170,7 +2170,11 @@ one variable and variables list is not provided."
         )
 
         # Update meta attributes (used for default output filename later)
-        precip_out.attrs.update({"precip_fn": precip_fn})
+        if isinstance(precip_fn, str):
+            precip_out.attrs.update({"precip_fn": precip_fn})
+        else:
+            precip_out.attrs.update({"precip_fn": "custom"})
+            
         if precip_clim_fn is not None:
             precip_out.attrs.update({"precip_clim_fn": precip_clim_fn})
         self.set_forcing(precip_out.where(mask), name="precip")
@@ -2296,7 +2300,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             else:
                 methods = [
                     "debruin",
-                    "makking",
+                    "makkink",
                     "penman-monteith_rh_simple",
                     "penman-monteith_tdew",
                     "hargreaves"
@@ -2304,15 +2308,26 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 raise ValueError(
                     f"Unknown pet method {pet_method}, select from {methods}"
                 )
-
-        ds = self.data_catalog.get_rasterdataset(
-            temp_pet_fn,
-            geom=self.region,
-            buffer=1,
-            time_tuple=(starttime, endtime),
-            variables=variables,
-            single_var_as_array=False,  # always return dataset
-        )
+        
+        #NEW: allowing for the input of a dataset
+        if not isinstance(temp_pet_fn, xr.Dataset):    
+            ds = self.data_catalog.get_rasterdataset(
+                temp_pet_fn,
+                geom=self.region,
+                buffer=1,
+                time_tuple=(starttime, endtime),
+                variables=variables,
+                single_var_as_array=False,  # always return dataset
+            )
+        #Checking that the necessary variables are present in the dataset
+        elif set(variables).issubset(temp_pet_fn.variables):
+            ds = temp_pet_fn
+            
+        else: 
+            raise ValueError(
+                f"input does not contain all necessary variables: {variables}"
+            )
+            
         if chunksize is not None:
             ds = ds.chunk({"time": chunksize})
 
@@ -2377,12 +2392,20 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 logger=self.logger,
                 **kwargs,
             )
-            # Update meta attributes with setup opt
-            opt_attr = {
-                "pet_fn": temp_pet_fn,
-                "pet_method": pet_method,
-            }
-            pet_out.attrs.update(opt_attr)
+            # allow attrs to handle both str and xr.Dataset input
+            if not isinstance(temp_pet_fn, xr.Dataset):
+                opt_attr = {
+                    "pet_fn": temp_pet_fn,
+                    "pet_method": pet_method,
+                }
+                pet_out.attrs.update(opt_attr)
+            else:
+                opt_attr = {
+                    "pet_fn": ds.attrs["paper_ref"],
+                    "pet_method": pet_method,
+                }
+                pet_out.attrs.update(opt_attr)
+            
             self.set_forcing(pet_out.where(mask), name="pet")
 
         # make sure only temp is written to netcdf
@@ -2400,11 +2423,18 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             logger=self.logger,
         )
         # Update meta attributes with setup opt (used for default naming later)
-        opt_attr = {
-            "temp_fn": temp_pet_fn,
-            "temp_correction": str(temp_correction),
-        }
-        temp_out.attrs.update(opt_attr)
+        if not isinstance(temp_pet_fn, xr.Dataset):
+            opt_attr = {
+                "temp_fn": temp_pet_fn,
+                "temp_correction": str(temp_correction),
+            }
+            temp_out.attrs.update(opt_attr)
+        else:
+            opt_attr = {
+                "temp_fn": ds.attrs["paper_ref"],
+                "temp_correction": str(temp_correction),
+            }
+            temp_out.attrs.update(opt_attr)
         self.set_forcing(temp_out.where(mask), name="temp")
 
     def setup_rootzoneclim(
