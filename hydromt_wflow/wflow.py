@@ -2390,7 +2390,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 pet_out.attrs.update(opt_attr)
             else:
                 opt_attr = {
-                    "pet_fn": ds.attrs["paper_ref"],
+                    "pet_fn": ds.attrs["paper_ref"], # TODO: bad idea to use paper_ref.. probably better to have a shortname data source
                     "pet_method": pet_method,
                 }
                 pet_out.attrs.update(opt_attr)
