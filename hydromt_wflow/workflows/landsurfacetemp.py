@@ -9,9 +9,9 @@ from hydromt.model.processes.meteo import resample_time
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["albedo", "emissivity", "radiation", "add_var_to_forcing", 
+__all__ = ["albedo", "emissivity", "radiation", #"add_var_to_forcing", 
            "solar_declination", "relative_distance", "extraterrestrial_radiation",
-           "compute_net_longwave_radiation", "compute_net_radiation"]
+           "compute_net_longwave_radiation", "compute_net_radiation", "wind"]
 
 
 def solar_declination(doy: int) -> float:
@@ -213,66 +213,66 @@ def compute_net_radiation(
     return net_radiation
 
 
-def add_var_to_forcing(
-    mod,
-    ds: Union[xr.Dataset, xr.DataArray],
-    var: str,
-    freq: Optional[str] = None,
-    reproj_method: str = "nearest_index",
-    resample_kwargs: Optional[dict] = None,
-):
-    """
-    Add variable to model forcing with proper reprojection and masking.
+# def add_var_to_forcing(
+#     mod,
+#     ds: Union[xr.Dataset, xr.DataArray],
+#     var: str,
+#     freq: Optional[str] = None,
+#     reproj_method: str = "nearest_index",
+#     resample_kwargs: Optional[dict] = None,
+# ):
+#     """
+#     Add variable to model forcing with proper reprojection and masking.
     
-    Parameters
-    ----------
-    mod : WflowModel
-        Wflow model instance
-    ds : xr.Dataset or xr.DataArray
-        Dataset or DataArray containing the variable to add
-    var : str
-        Variable name to add to forcing
-    freq : str, optional
-        Resampling frequency, by default None
-    reproj_method : str, optional
-        Method for spatial reprojection, by default "nearest_index"
-    resample_kwargs : dict, optional
-        Additional arguments for time resampling, by default None
+#     Parameters
+#     ----------
+#     mod : WflowModel
+#         Wflow model instance
+#     ds : xr.Dataset or xr.DataArray
+#         Dataset or DataArray containing the variable to add
+#     var : str
+#         Variable name to add to forcing
+#     freq : str, optional
+#         Resampling frequency, by default None
+#     reproj_method : str, optional
+#         Method for spatial reprojection, by default "nearest_index"
+#     resample_kwargs : dict, optional
+#         Additional arguments for time resampling, by default None
         
-    Returns
-    -------
-    WflowModel
-        Updated model with new forcing variable
-    """
-    resample_kwargs = resample_kwargs or {}
+#     Returns
+#     -------
+#     WflowModel
+#         Updated model with new forcing variable
+#     """
+#     resample_kwargs = resample_kwargs or {}
     
-    # get reference grid and fill value
-    ex_grid = mod.grid["wflow_dem"]
-    ex_fillval = ex_grid.attrs["_FillValue"]
-    ex_mask = ex_grid.values == ex_fillval
+#     # get reference grid and fill value
+#     ex_grid = mod.grid["wflow_dem"]
+#     ex_fillval = ex_grid.attrs["_FillValue"]
+#     ex_mask = ex_grid.values == ex_fillval
     
-    # reproject data
-    if isinstance(ds, xr.Dataset):
-        da = ds[var].raster.reproject_like(ex_grid, method=reproj_method)
-    else:
-        da = ds.raster.reproject_like(ex_grid, method=reproj_method)
+#     # reproject data
+#     if isinstance(ds, xr.Dataset):
+#         da = ds[var].raster.reproject_like(ex_grid, method=reproj_method)
+#     else:
+#         da = ds.raster.reproject_like(ex_grid, method=reproj_method)
     
-    # apply mask and set nodata
-    da = da.where(~ex_mask, ex_fillval)
-    da.raster.set_nodata(ex_fillval)
-    da.raster.attrs["_FillValue"] = ex_fillval
+#     # apply mask and set nodata
+#     da = da.where(~ex_mask, ex_fillval)
+#     da.raster.set_nodata(ex_fillval)
+#     da.raster.attrs["_FillValue"] = ex_fillval
     
-    # resample time if requested
-    if freq is not None and "time" in da.dims:
-        resample_kwargs.update(upsampling="bfill", downsampling="mean")
-        da = resample_time(da, freq, conserve_mass=False, **resample_kwargs)
-        da.raster.set_nodata(ex_fillval)
+#     # resample time if requested
+#     if freq is not None and "time" in da.dims:
+#         resample_kwargs.update(upsampling="bfill", downsampling="mean")
+#         da = resample_time(da, freq, conserve_mass=False, **resample_kwargs)
+#         da.raster.set_nodata(ex_fillval)
     
-    # set variable name and add to forcing
-    da.name = var
-    mod.forcing[var] = da
+#     # set variable name and add to forcing
+#     da.name = var
+#     mod.forcing[var] = da
     
-    return mod
+#     return mod
 
 
 def albedo(
@@ -311,12 +311,10 @@ def albedo(
     # reproject to model grid
     albedo_out = albedo.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
     
-    # ensure values are between 0 and 1
-    albedo_out = np.clip(albedo_out, 0, 1)
-    
     # resample time if requested
     albedo_out.name = "albedo"
     albedo_out.attrs.update(unit="1")
+    
     if freq is not None:
         resample_kwargs.update(upsampling="bfill", downsampling="mean")
         albedo_out = resample_time(albedo_out, freq, conserve_mass=False, **resample_kwargs)
@@ -423,4 +421,88 @@ def radiation(
         radiation_out = resample_time(radiation_out, freq, conserve_mass=False, **resample_kwargs)
     
     return radiation_out
+
+
+def wind(
+    mod,
+    wind: Optional[xr.DataArray] = None,
+    wind_u: Optional[xr.DataArray] = None,
+    wind_v: Optional[xr.DataArray] = None,
+    altitude: float = 10.0,
+    altitude_correction: bool = False,
+    freq: Optional[str] = None,
+    reproj_method: str = "nearest_index",
+    resample_kwargs: Optional[dict] = None,
+) -> xr.DataArray:
+    """
+    Process wind data for land surface temperature calculations.
+    
+    Parameters
+    ----------
+    mod : WflowModel
+        Wflow model instance
+    wind : xr.DataArray
+        Wind speed data array [m s-1]
+    wind_u : xr.DataArray, optional
+        U-component of wind [m s-1], by default None
+    wind_v : xr.DataArray, optional
+        V-component of wind [m s-1], by default None
+    altitude : float, optional
+        Altitude of wind measurements [m], by default 10.0
+    altitude_correction : bool, optional
+        Apply altitude correction to 2m, by default False
+    freq : str, optional
+        Resampling frequency, by default None
+    reproj_method : str, optional
+        Reprojection method, by default "nearest_index"
+    resample_kwargs : dict, optional
+        Additional resampling arguments, by default None
+        
+    Returns
+    -------
+    xr.DataArray
+        Processed wind speed data [m s-1]
+    """
+    resample_kwargs = resample_kwargs or {}
+    if (wind_u is None and wind_v is None) and (wind is None):
+        raise ValueError("Either wind_u and wind_v or wind must be provided")
+    # If wind components are provided, calculate wind speed
+    if wind_u is not None and wind_v is not None:
+        if wind_u.raster.dim0 != "time":
+            raise ValueError(f'First wind_u dim should be "time", not {wind_u.raster.dim0}')
+        if wind_v.raster.dim0 != "time":
+            raise ValueError(f'First wind_v dim should be "time", not {wind_v.raster.dim0}')
+        
+        # reproject to model grid
+        wind_u_out = wind_u.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
+        wind_v_out = wind_v.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
+        
+        # calculate wind speed from components
+        wind_out = np.sqrt(wind_u_out**2 + wind_v_out**2)
+        wind_out.name = "wind_speed"
+    else:
+        # Use provided wind speed directly
+        if wind.raster.dim0 != "time":
+            raise ValueError(f'First wind dim should be "time", not {wind.raster.dim0}')
+        
+        # reproject to model grid
+        wind_out = wind.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
+        wind_out.name = "wind_speed"
+    
+    # Apply altitude correction if requested
+    if altitude_correction and altitude != 2.0:
+        # Simple logarithmic wind profile correction
+        # wind_2m = wind_h * ln(2/z0) / ln(h/z0)
+        # Using z0 = 0.1 m as typical surface roughness
+        z0 = 0.1  # surface roughness length [m]
+        wind_out = wind_out * np.log(2.0 / z0) / np.log(altitude / z0)
+    
+    wind_out = np.fmax(wind_out, 0)
+    
+    wind_out.attrs.update(unit="m s-1")
+    if freq is not None:
+        resample_kwargs.update(upsampling="bfill", downsampling="mean")
+        wind_out = resample_time(wind_out, freq, conserve_mass=False, **resample_kwargs)
+    
+    return wind_out
 

@@ -102,6 +102,9 @@ class WflowModel(Model):
             **catalog_keys,
         )
 
+        # Set the _write attribute based on mode
+        self._write = mode in ["w", "r+"]
+
         # wflow specific
         self._flwdir = None
         self.data_catalog.from_yml(self._CATALOGS)
@@ -134,6 +137,11 @@ class WflowModel(Model):
     def staticmaps(self) -> WflowStaticmapsComponent:
         """Return the staticmaps component."""
         return self.components["staticmaps"]
+
+    @property
+    def grid(self) -> xr.Dataset:
+        """Return the grid data (alias for staticmaps.data)."""
+        return self.components["staticmaps"].data
 
     # Non model component properties
     @property
@@ -3783,8 +3791,6 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         emissivity: str | xr.DataArray | None = None,
         shortwave: str | xr.DataArray | None = None,
         wind: str | xr.DataArray | None = None,
-        wind_u: str | xr.DataArray | None = None,
-        wind_v: str | xr.DataArray | None = None,
         wind_altitude: float = 10,  # Wind measurement altitude in meters (default: 10m)
         wind_altitude_correction: bool = False,  # Apply altitude correction in preprocessing (default: False, let Wflow.jl handle it)
         reproj_method: str = "nearest_index"
@@ -3835,25 +3841,61 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         starttime = self.get_config("time.starttime")
         endtime = self.get_config("time.endtime")
         freq = pd.to_timedelta(self.get_config("time.timestepsecs"), unit="s")
+        
+              # Process wind if provided
+        if wind is not None:
+            logger.info("Processing wind data.")
+            if isinstance(wind, str):
+                wind_u = self.data_catalog.get_rasterdataset(
+                    wind,
+                    geom=self.region,
+                    buffer=2,
+                    time_tuple=(starttime, endtime),
+                    variables=["wind10_u"]
+                    ).sel(time=slice(starttime, endtime))
+                wind_v = self.data_catalog.get_rasterdataset(
+                    wind,
+                    geom=self.region,
+                    buffer=2,
+                    time_tuple=(starttime, endtime),
+                    variables=["wind10_v"]
+                    ).sel(time=slice(starttime, endtime))
+                
+                wind_u = wind_u.astype("float32")
+                wind_v = wind_v.astype("float32")
+                wind_out = workflows.landsurfacetemp.wind(
+                    mod=self,
+                    wind_u=wind_u,
+                    wind_v=wind_v,
+                    altitude=wind_altitude,
+                    altitude_correction=wind_altitude_correction,
+                    freq=freq,
+                    reproj_method=reproj_method,
+                )
+            else:
+                raise ValueError(f"Invalid type for wind: {type(wind)}")
+            
+            self.set_forcing(wind_out, name="wind")
+            self._update_config_variable_name("wind", data_type="forcing")
+            self.config.set("input.wind_altitude", wind_altitude)
 
-        # Process albedo if provided
         if albedo is not None:
-            type_albedo = type(albedo)
-            if type_albedo == str:
+            if isinstance(albedo, str):
                 try:
                     albedo = self.data_catalog.get_rasterdataset(albedo, 
                                                                  geom=self.region, 
                                                                  buffer=2, 
                                                                  time_tuple=(starttime, 
-                                                                             endtime))
+                                                                             endtime),
+                                                                 variables="albedo")
                     logger.info(f"Retrieved albedo data from data catalog under:{albedo}")
                 except Exception as e:
                     logger.error(f"Error retrieving albedo key {albedo} from data catalog: {e}")
                     raise e
-            elif type_albedo == xr.DataArray:
+            elif isinstance(albedo, xr.DataArray):
                 albedo = albedo
             else:
-                raise ValueError(f"Invalid type for albedo: {type_albedo}")
+                raise ValueError(f"Invalid type for albedo: {type(albedo)}")
             
             albedo = albedo.astype("float32")
             
@@ -3866,7 +3908,6 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     freq=freq,
                     reproj_method=reproj_method,
                 )
-                
                 self.set_forcing(albedo_out, name="albedo")
                 self._update_config_variable_name("albedo", data_type="forcing")
             else:
@@ -3877,7 +3918,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     albedo=albedo,
                     reproj_method=reproj_method,
                 )
-                self.set_grid(albedo_out, name="albedo")
+                self.set_staticmaps(albedo_out, name="albedo")
                 self._update_config_variable_name("albedo", data_type="static")
 
         # Process emissivity if provided
@@ -3887,7 +3928,8 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     emissivity = self.data_catalog.get_rasterdataset(emissivity, 
                                                                      geom=self.region, 
                                                                      buffer=2, 
-                                                                     time_tuple=(starttime, endtime))
+                                                                     time_tuple=(starttime, endtime),
+                                                                     variables="emissivity")
                     logger.info(f"Retrieved emissivity data from data catalog under:{emissivity}")
                 except Exception as e:
                     logger.error(f"Error retrieving emissivity data from {emissivity}: {e}")
@@ -3903,8 +3945,8 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 # Time-varying data -> goes to forcing
                 logger.info("Processing time-varying emissivity data for forcing.")
                 emissivity_out = workflows.landsurfacetemp.emissivity(
+                    mod=self,
                     emissivity=emissivity,
-                    da_model=self.grid,
                     freq=freq,
                     reproj_method=reproj_method,
                 )
@@ -3918,7 +3960,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     emissivity=emissivity,
                     reproj_method=reproj_method,
                 )
-                self.set_grid(emissivity_out, name="emissivity")
+                self.set_staticmaps(emissivity_out, name="emissivity")
                 self._update_config_variable_name("emissivity", 
                                                   data_type="static")
 
@@ -3930,7 +3972,8 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                                                                     geom=self.region, 
                                                                     buffer=2, 
                                                                     time_tuple=(starttime,
-                                                                                 endtime)
+                                                                                 endtime),
+                                                                    variables="shortwave_down"
                                                                     )
                     logger.info(f"Retrieved shortwave radiation data from data catalog under:{shortwave}")
                 except Exception as e:
@@ -3944,8 +3987,8 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             shortwave = shortwave.astype("float32")
             
             shortwave_out = workflows.landsurfacetemp.radiation(
-                radiation=shortwave,
                 mod=self,
+                radiation=shortwave,
                 var_name="shortwave_in",
                 freq=freq,
                 reproj_method=reproj_method,
@@ -3953,79 +3996,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             self.set_forcing(shortwave_out, name="shortwave_in")
             self._update_config_variable_name("shortwave_in", data_type="forcing")
 
-        # Process wind if provided
-        if wind is not None or (wind_u is not None and wind_v is not None):
-            logger.info("Processing wind data.")
-            
-            if wind_u is not None and wind_v is not None:
-                # Get wind components
-                if isinstance(wind_u, str):
-                    wind_u = self.data_catalog.get_rasterdataset(
-                        wind_u,
-                        geom=self.region,
-                        buffer=2,
-                        time_tuple=(starttime, endtime),
-                    )
-                elif isinstance(wind_u, xr.DataArray):
-                    wind_u = wind_u
-                else:
-                    raise ValueError(f"Invalid type for wind_u: {type(wind_u)}")
-                
-                if isinstance(wind_v, str):
-                    wind_v = self.data_catalog.get_rasterdataset(
-                        wind_v,
-                        geom=self.region,
-                        buffer=2,
-                        time_tuple=(starttime, endtime),
-                    )
-                elif isinstance(wind_v, xr.DataArray):
-                    wind_v = wind_v
-                else:
-                    raise ValueError(f"Invalid type for wind_v: {type(wind_v)}")
-                
-                wind_u = wind_u.astype("float32")
-                wind_v = wind_v.astype("float32")
-                
-                wind_out = workflows.meteo.wind(
-                    mod=self,
-                    wind_u=wind_u,
-                    wind_v=wind_v,
-                    altitude=wind_altitude,
-                    altitude_correction=wind_altitude_correction,
-                    freq=freq,
-                    reproj_method=reproj_method,
-                )
-            else:
-                # Get wind speed directly
-                type_wind = type(wind)
-                if type_wind == str:
-                    wind = self.data_catalog.get_rasterdataset(
-                        wind,
-                        geom=self.region,
-                        buffer=2,
-                        time_tuple=(starttime, endtime),
-                    )
-                elif type_wind == xr.DataArray:
-                    wind = wind
-                else:
-                    raise ValueError(f"Invalid type for wind: {type_wind}")
-                
-                wind = wind.astype("float32")
-                
-                wind_out = workflows.meteo.wind(
-                    da_model=self.staticmaps,
-                    wind=wind,
-                    altitude=wind_altitude,
-                    altitude_correction=wind_altitude_correction,
-                    freq=freq,
-                    reproj_method=reproj_method,
-                )
-            
-            self.set_forcing(wind_out, name="land_surface_air_flow__speed")
-            self._update_config_variable_name("land_surface_air_flow__speed", data_type="forcing")
-            
-            # Add wind altitude to config for Wflow.jl to use for canopy correction
-            self.config["input"]["wind_altitude"] = wind_altitude
+  
 
         # Calculate net radiation if we have the required variables
         logger.info("Calculating net radiation components.")
@@ -5723,8 +5694,9 @@ Run setup_soilmaps first"
         xarray dataaray per forcing variable in the hydromt ``forcing`` dictionary.
         """
         fn_default = "inmaps.nc"
+        root_path = str(self.root) if hasattr(self.root, "__str__") else self.root
         fn = self.get_config(
-            "input.path_forcing", abs_path=True, fallback=join(self.root, fn_default)
+            "input.path_forcing", abs_path=True, fallback=join(root_path, fn_default)
         )
 
         if self.get_config("dir_input") is not None:
@@ -5821,7 +5793,8 @@ see https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offs
                         input_dir = self.get_config("dir_input", abs_path=True)
                         fn_out = join(input_dir, fn_name)
                     else:
-                        fn_out = join(self.root, fn_name)
+                        root_path = str(self.root) if hasattr(self.root, "__str__") else self.root
+                        fn_out = join(root_path, fn_name)
                 else:
                     fn_out = None
 
@@ -5857,7 +5830,8 @@ see https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offs
                         input_dir = self.get_config("dir_input", abs_path=True)
                         fn_default_path = join(input_dir, fn_default)
                     else:
-                        fn_default_path = join(self.root, fn_default)
+                        root_path = str(self.root) if hasattr(self.root, "__str__") else self.root
+                        fn_default_path = join(root_path, fn_default)
                     if isfile(fn_default_path):
                         logger.warning(
                             "Netcdf default forcing file already exists, \
@@ -6034,6 +6008,36 @@ change name input.path_forcing "
             data = utils.mask_raster_from_layer(data, self.grid[self._MAPS["basins"]])
         # fall back on default set_states behaviour
         self.states.set(data, name=name)
+
+    def set_forcing(
+        self,
+        data: xr.DataArray | xr.Dataset,
+        name: str | None = None,
+    ):
+        """Set forcing data.
+
+        Parameters
+        ----------
+        data : xr.DataArray | xr.Dataset
+            Data to set as forcing.
+        name : str | None, optional
+            Name for the forcing data, by default None.
+        """
+        if not hasattr(self, "__dict__") or "_forcing" not in self.__dict__:
+            self._forcing = {}
+        if name is None:
+            if hasattr(data, "name"):
+                name = data.name
+            else:
+                name = "forcing"
+        self._forcing[name] = data
+
+    @property
+    def forcing(self):
+        """Return the forcing data dictionary."""
+        if not hasattr(self, "__dict__") or "_forcing" not in self.__dict__:
+            self._forcing = {}
+        return self._forcing
 
     @hydromt_step
     def read_results(self):
