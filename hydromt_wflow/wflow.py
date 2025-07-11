@@ -3849,14 +3849,14 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 wind_u = self.data_catalog.get_rasterdataset(
                     wind,
                     geom=self.region,
-                    buffer=2,
+                    buffer=4,
                     time_tuple=(starttime, endtime),
                     variables=["wind10_u"]
                     ).sel(time=slice(starttime, endtime))
                 wind_v = self.data_catalog.get_rasterdataset(
                     wind,
                     geom=self.region,
-                    buffer=2,
+                    buffer=4,
                     time_tuple=(starttime, endtime),
                     variables=["wind10_v"]
                     ).sel(time=slice(starttime, endtime))

@@ -116,14 +116,16 @@ def compute_net_longwave_radiation(
     temp_kelvin_4 = temp_kelvin ** 4
     
     # Calculate vapor pressure (ea)
-    # ea = 0.611 * exp(17.27 * Ta / (237.3 + Ta)^2)
-    vapor_pressure = 0.611 * np.exp(17.27 * air_temperature / (237.3 + air_temperature) ** 2)
+    # ea = tetens formulation 2008 monteith update
+    # temp in celcius and ea in kPa, expected values 25 degrees goes to 3.188
+    vapor_pressure = 0.61078 * np.exp( ( air_temperature * 17.27 ) / (237.3 + air_temperature) )
     
     # Calculate (0.34 - 0.14√ea)
     b_term = 0.34 - 0.14 * np.sqrt(vapor_pressure)
     
     # Calculate extraterrestrial radiation for each time step
     doy = time_coord.dt.dayofyear
+    
     Rso = xr.apply_ufunc(
         extraterrestrial_radiation,
         latitude,
@@ -141,10 +143,11 @@ def compute_net_longwave_radiation(
     
     # Calculate (1.35(Rins/Rso) - 0.35)
     ratio = shortwave_mj / Rso
+    
     c_term = (1.35 * ratio) - 0.35
     
     # Calculate net longwave radiation
-    net_longwave = sigma * temp_kelvin_4 * b_term * c_term
+    net_longwave = - sigma * temp_kelvin_4 * b_term * c_term
     
     # Convert back to W m-2
     net_longwave_w = net_longwave / 0.0864
@@ -156,7 +159,6 @@ def compute_net_longwave_radiation(
         "long_name": "Net longwave radiation",
         "description": "Calculated using Stefan-Boltzmann law and atmospheric correction"
     })
-    
     return net_longwave_w
 
 
