@@ -215,68 +215,6 @@ def compute_net_radiation(
     return net_radiation
 
 
-# def add_var_to_forcing(
-#     mod,
-#     ds: Union[xr.Dataset, xr.DataArray],
-#     var: str,
-#     freq: Optional[str] = None,
-#     reproj_method: str = "nearest_index",
-#     resample_kwargs: Optional[dict] = None,
-# ):
-#     """
-#     Add variable to model forcing with proper reprojection and masking.
-    
-#     Parameters
-#     ----------
-#     mod : WflowModel
-#         Wflow model instance
-#     ds : xr.Dataset or xr.DataArray
-#         Dataset or DataArray containing the variable to add
-#     var : str
-#         Variable name to add to forcing
-#     freq : str, optional
-#         Resampling frequency, by default None
-#     reproj_method : str, optional
-#         Method for spatial reprojection, by default "nearest_index"
-#     resample_kwargs : dict, optional
-#         Additional arguments for time resampling, by default None
-        
-#     Returns
-#     -------
-#     WflowModel
-#         Updated model with new forcing variable
-#     """
-#     resample_kwargs = resample_kwargs or {}
-    
-#     # get reference grid and fill value
-#     ex_grid = mod.grid["wflow_dem"]
-#     ex_fillval = ex_grid.attrs["_FillValue"]
-#     ex_mask = ex_grid.values == ex_fillval
-    
-#     # reproject data
-#     if isinstance(ds, xr.Dataset):
-#         da = ds[var].raster.reproject_like(ex_grid, method=reproj_method)
-#     else:
-#         da = ds.raster.reproject_like(ex_grid, method=reproj_method)
-    
-#     # apply mask and set nodata
-#     da = da.where(~ex_mask, ex_fillval)
-#     da.raster.set_nodata(ex_fillval)
-#     da.raster.attrs["_FillValue"] = ex_fillval
-    
-#     # resample time if requested
-#     if freq is not None and "time" in da.dims:
-#         resample_kwargs.update(upsampling="bfill", downsampling="mean")
-#         da = resample_time(da, freq, conserve_mass=False, **resample_kwargs)
-#         da.raster.set_nodata(ex_fillval)
-    
-#     # set variable name and add to forcing
-#     da.name = var
-#     mod.forcing[var] = da
-    
-#     return mod
-
-
 def albedo(
     mod,
     albedo: xr.DataArray,
