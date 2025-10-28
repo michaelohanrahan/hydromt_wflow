@@ -8,7 +8,7 @@ import numpy as np
 import xarray as xr
 from hydromt.gis import flw
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"hydromt.{__name__}")
 
 
 __all__ = ["gauge_map_uparea"]
@@ -23,7 +23,6 @@ def gauge_map_uparea(
     rel_error: float = 0.05,
     abs_error: float = 50,
     fillna: bool = False,
-    logger=logger,
 ):
     """
     Snap point locations to grid cell.
@@ -118,7 +117,7 @@ def gauge_map_uparea(
 
     # find best matching uparea cell in window
     i_wdw = upa_dff.argmin("wdw").load()
-    idx_valid = np.where(upa_check.isel(wdw=i_wdw).values)[0]
+    idx_valid = np.nonzero(upa_check.isel(wdw=i_wdw).values)[0]
     if idx_valid.size < gdf.index.size:
         logger.warning(
             f"{idx_valid.size}/{gdf.index.size} gauge points successfully snapped."
@@ -138,7 +137,6 @@ def gauge_map_uparea(
         ids=ids_out,
         stream=None,
         flwdir=None,
-        logger=logger,
     )
 
     # Final message

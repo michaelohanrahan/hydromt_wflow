@@ -7,7 +7,7 @@ Frequently asked questions
 
 This page contains some FAQ / tips and tricks to work with HydroMT-Wflow.
 For more general questions on how to work with data or the HydroMT config and command line,
-you can visit the `HydroMT core FAQ page <https://deltares.github.io/hydromt/latest/getting_started/faq.html>`_
+you can visit the `HydroMT core FAQ page <https://deltares.github.io/hydromt/stable/overview/faq.html>`_
 
 Building a Wflow model
 ----------------------
@@ -17,7 +17,7 @@ Building a Wflow model
 To build a Wflow model, it is strongly recommended to use the ``basin`` or ``subbasin`` when defining your region of interest.
 This ensures that all upstream contributing cells are well taken into account. Using other options might cause your Wflow model
 run crash. If you are sure of what you are doing, you can optionally use the ``geom`` option and provide an exact shapefile of the
-basin/subbasins you want to derive, that was prepared using the same DEM source that you intend to use in the :py:func:`~WflowModel.setup_basemaps`
+basin/subbasins you want to derive, that was prepared using the same DEM source that you intend to use in the :py:func:`~WflowSbmModel.setup_basemaps`
 method.
 
  | **Q**: Can I derive several sub-basins at the same time using a bounding box or a geometry instead of a list of point coordinates?
@@ -30,8 +30,8 @@ subbasin you want to create. You can use either streamorder *strord* or upstream
 
  | **Q**: Can I use a different dataset for precipitation and temperature forcing data?
 
-Yes, that is one of the reason why the two were separated into two separate methods: :py:func:`~WflowModel.setup_precip_forcing` and
-:py:func:`~WflowModel.setup_temp_pet_forcing`, you can just use a different data source for *precip_fn* and *temp_pet_fn* and HydroMT
+Yes, that is one of the reason why the two were separated into two separate methods: :py:func:`~WflowSbmModel.setup_precip_forcing` and
+:py:func:`~WflowSbmModel.setup_temp_pet_forcing`, you can just use a different data source for *precip_fn* and *temp_pet_fn* and HydroMT
 will do its resampling magic!
 
 
@@ -51,9 +51,9 @@ enumerating the methods by adding a number to the end of the method name. For ex
 Updating a Wflow model
 ----------------------
 
- | **Q**: Is there an easy way to update reservoirs or lakes parameters in my Wflow model ?
+ | **Q**: Is there an easy way to update reservoir parameters in my Wflow model ?
 
-To easily update reservoirs or lakes parameters, you can directly use the *reservoirs.geojson* and *lakes.geojson* that are saved
+To easily update reservoir parameters, you can directly use the *meta_reservoirs_simple_control.geojson* and *meta_reservoirs_no_control.geojson* that are saved
 by HydroMT into the *staticgeoms* folder. Once you have updated the parameters with the new value, just use these geojson files as
 your new "local" input data!
 
@@ -70,9 +70,10 @@ where you can specify which TOML file to use using the *config_fn* argument.
 Others
 ------
 
- | **Q**: Can I convert my old Wflow python model to the new Wflow Julia version with HydroMT ?
+ | **Q**: Can I convert my old Wflow model to the new Wflow Julia version with HydroMT ?
 
-HydroMT is still able to read the python PCRaster based maps of Wflow with the method :py:func:`~WflowModel.setup_grid_from_raster`. See this example: `convert_staticmaps_to_mapstack.ipynb <../_examples/convert_staticmaps_to_mapstack.ipynb>`_.
-So actually just a read and write of your python model will do most of the job :) For lakes and reservoirs parameters,
-the best is to use a shapefile of yours lakes and reservoirs with the right columns for each parameters (see previous question on updating
-reservoir).
+Conversion from an old python Wflow model to Wflow Julia is not possible anymore since HydroMT Wflow version 1.0.
+You can use an older version to do so and check the required steps in the previous version of this documentation page.
+
+We do support conversion of Wflow v0.x Julia models to Wflow v1.x Julia models using the :py:func:`~WflowSbmModel.upgrade_to_v1_wflow` method for SBM models and :py:func:`~WflowSedimentModel.upgrade_to_v1_wflow` for Sediment models.
+See the corresponding example for more information: `Upgrade to Wflow.jl version 1 <../_examples/upgrade_to_wflow_v1.ipynb>`_

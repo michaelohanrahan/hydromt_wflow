@@ -1,47 +1,59 @@
 """Some utilities from the Wflow plugin."""
 
 import logging
+<<<<<<< HEAD
+=======
+from functools import reduce
+>>>>>>> v1.0.0rc2
 from os.path import abspath, join
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Callable, Union
 
+import geopandas as gpd
 import numpy as np
-import tomlkit
 import xarray as xr
+<<<<<<< HEAD
 from hydromt._io import _open_timeseries_from_table
 from hydromt.gis import GeoDataArray
+=======
+from hydromt.gis import GeoDataArray
+from hydromt.io import open_timeseries_from_table
+>>>>>>> v1.0.0rc2
 from hydromt.model.processes.grid import grid_from_constant
 
-from .naming import (
-    WFLOW_NAMES,
-    WFLOW_SEDIMENT_NAMES,
-    WFLOW_SEDIMENT_STATES_NAMES,
-    WFLOW_STATES_NAMES,
-)
+logger = logging.getLogger(f"hydromt.{__name__}")
 
+<<<<<<< HEAD
 logger = logging.getLogger(__name__)
 
 DATADIR = Path(Path(__file__).parent, "data")
+=======
+DATADIR = Path(__file__).parent / "data"
+>>>>>>> v1.0.0rc2
 
 __all__ = [
-    "convert_to_wflow_v1_sbm",
-    "convert_to_wflow_v1_sediment",
     "get_config",
-    "get_grid_from_config",
-    "read_csv_results",
     "set_config",
+    "get_grid_from_config",
+    "read_csv_output",
 ]
 
 
 def get_config(
+<<<<<<< HEAD
     config: tomlkit.TOMLDocument,
     *args,
+=======
+    config: dict,
+    key: str,
+>>>>>>> v1.0.0rc2
     root: Path | None = None,
     fallback: Any | None = None,
     abs_path: bool = False,
 ):
     """
     Get a config value at key.
+<<<<<<< HEAD
 
     Parameters
     ----------
@@ -204,8 +216,95 @@ def read_csv_results(
     fn: Path | str, config: Dict, maps: xr.Dataset
 ) -> Dict[str, GeoDataArray]:
     """Read wflow results csv timeseries and parse to dictionary.
+=======
+>>>>>>> v1.0.0rc2
 
-    Parses the wflow csv results file into different ``hydromt.GeoDataArrays``, one per
+    Parameters
+    ----------
+    config : dict
+        The config settings.
+    key : str
+        keys are string with '.' indicating a new level: ('key1.key2')
+    root: Path, optional
+        The model root.
+    fallback: Any, optional
+        fallback value if key(s) not found in config, by default None.
+    abs_path: bool, optional
+        If True return the absolute path relative to the model root,
+        by default False.
+        NOTE: this assumes the config is located in model root!
+
+    Returns
+    -------
+    value : Any
+        dictionary value
+
+    Examples
+    --------
+    >> config = {'a': 1, 'b': {'c': {'d': 2}}
+
+    >> get_config(config, 'a')
+    >> 1
+
+    >> get_config(config, 'b.c.d')
+    >> 2
+
+    """
+    parts = key.split(".")
+    num_parts = len(parts)
+    current = config
+    value = fallback
+    for i, part in enumerate(parts):
+        if i < num_parts - 1:
+            current = current.get(part, {})
+        else:
+            value = current.get(part, fallback)
+
+    if abs_path and isinstance(value, (str, Path)):
+        value = Path(value)
+        if not value.is_absolute():
+            if root is None:
+                raise ValueError(
+                    "root path is required to get absolute path from relative path"
+                )
+            value = Path(abspath(join(root, value)))
+
+    return value
+
+
+def set_config(config: dict, key: str, value: Any):
+    """
+    Update the config toml at key(s) with values.
+
+    Parameters.
+    ----------
+    config : dict
+        The config settings.
+    key : str
+        key is a string,  with '.' indicating a new level: ('key1.key2').
+
+    Examples
+    --------
+    .. code-block:: ipython
+        >> config
+        >> {'a': 1, 'b': {'c': {'d': 2}}}
+        >> set_config(config, 'a', 99)
+        >> {'a': 99, 'b': {'c': {'d': 2}}}
+        >> set_config(config, 'b.d.e', 99)
+        >> {'a': 1, 'b': {'c': {'d': 99}}}
+    """
+    if not isinstance(key, str):
+        raise TypeError("key must be string")
+    keys = key.split(".")
+    reduce(lambda d, k: d.setdefault(k, {}), keys[:-1], config)[keys[-1]] = value
+
+
+def read_csv_output(
+    fn: Path | str, config: dict, maps: xr.Dataset
+) -> dict[str, GeoDataArray]:
+    """Read wflow output csv timeseries and parse to dictionary.
+
+    Parses the wflow csv output file into different ``hydromt.GeoDataArrays``, one per
     column (csv section and csv.column sections of the TOML). The xy coordinates are the
     coordinates of the station or of the representative point of the subcatch/area. The
     variable name in the ``GeoDataArray`` corresponds to the csv header attribute or
@@ -214,7 +313,7 @@ def read_csv_results(
     Parameters
     ----------
     fn: str
-        Path to the wflow csv results file.
+        Path to the wflow csv output file.
     config: dict
         wflow.toml configuration.
     maps: xr.Dataset
@@ -228,15 +327,21 @@ of the config.
     """
     # Count items by csv.column
     count = 1
-    csv_dict = dict()
+    csv_dict = {}
     # Loop over csv.column
     for col in config["output"]["csv"].get("column"):
         header = col["header"]
+        logger.debug(f"Reading csv column '{header}'")
         # Column based on map
         if "map" in col.keys():
             # Read the corresponding map and derive the different locations
             # The centroid of the geometry is used as coordinates for the timeseries
             map_name = config["input"].get(f"{col['map']}")
+            if map_name not in maps:
+                logger.warning(
+                    f"Map '{map_name}' not found in staticmaps. Skip reading."
+                )
+                return {}
             da = maps[map_name]
             gdf = da.raster.vectorize()
             gdf.geometry = gdf.geometry.representative_point()
@@ -295,7 +400,7 @@ of the config.
                     full_index = maps[
                         f"{config['input'].get('subbasin_location__count')}"
                     ].copy()
-                    res_x, res_y = full_index.raster.res
+                    _, res_y = full_index.raster.res
                     if res_y < 0:
                         full_index = full_index.reindex(
                             {
@@ -315,10 +420,6 @@ of the config.
                     if "reservoir" in col["parameter"]:
                         mask = maps[
                             f"{config['input'].get('reservoir_location__count')}"
-                        ].copy()
-                    elif "lake" in col["parameter"]:
-                        mask = maps[
-                            f"{config['input'].get('lake_location__count')}"
                         ].copy()
                     elif "river" in col["parameter"]:
                         mask = maps[
@@ -369,7 +470,7 @@ of the config.
 
 def get_grid_from_config(
     var_name: str,
-    config: Dict = {},
+    config: dict = {},
     grid: xr.Dataset | None = None,
     root: Path | None = None,
     abs_path: bool = False,
@@ -412,34 +513,17 @@ def get_grid_from_config(
     """
     # get config value
     # try with input only
+    var_name = get_wflow_var_fullname(var_name, config)
     var = get_config(
-        config,
-        f"input.{var_name}",
+        key=var_name,
+        config=config,
         fallback=None,
         root=root,
         abs_path=abs_path,
     )
     if var is None:
-        # try with input.static
-        var = get_config(
-            config,
-            f"input.static.{var_name}",
-            fallback=None,
-            root=root,
-            abs_path=abs_path,
-        )
-    if var is None:
         # try with input.static.var.value
         var = config["input"]["static"].get(f"{var_name}.value", None)
-    if var is None:
-        # try with input.cyclic
-        var = get_config(
-            config,
-            f"input.cyclic.{var_name}",
-            fallback=None,
-            root=root,
-            abs_path=abs_path,
-        )
     if var is None:
         raise ValueError(f"variable {var_name} not found in config.")
 
@@ -464,7 +548,7 @@ def get_grid_from_config(
 
         # else scale and offset
         else:
-            var_name = get_config(var, "netcdf.variable.name")
+            var_name = get_config(key="netcdf_variable_name", config=var)
             scale = var.get("scale", 1.0)
             offset = var.get("offset", 0.0)
             # apply scale and offset
@@ -475,10 +559,35 @@ def get_grid_from_config(
     return da
 
 
+<<<<<<< HEAD
 def _mask_data_array(data_array: xr.DataArray, mask: xr.DataArray) -> xr.DataArray:
     """Mask the data array based on the mask."""
     # If the data is boolean, we set it to False where the mask is False
     if data_array.dtype == "bool":
+=======
+def get_wflow_var_fullname(input_var: str, config: dict) -> str:
+    """Get the full variable name for a Wflow variable."""
+    # Check if the variable is in the input section
+    if get_config(config, f"input.{input_var}") is not None:
+        return f"input.{input_var}"
+    # Check if the variable is in the static section
+    if get_config(config, f"input.static.{input_var}") is not None:
+        return f"input.static.{input_var}"
+    # Check if the variable is in the cyclic section
+    if get_config(config, f"input.cyclic.{input_var}") is not None:
+        return f"input.cyclic.{input_var}"
+    # Check if the variable is in the forcing section
+    if get_config(config, f"input.forcing.{input_var}") is not None:
+        return f"input.forcing.{input_var}"
+    # If not found, return the original variable name
+    return input_var
+
+
+def _mask_data_array(data_array: xr.DataArray, mask: xr.DataArray) -> xr.DataArray:
+    """Mask the data array based on the mask."""
+    # If the data is boolean, we set it to False where the mask is False
+    if data_array.dtype == np.bool:
+>>>>>>> v1.0.0rc2
         return data_array.where(mask, False)
     # Otherwise we set it to nodata where the mask is False
     else:
@@ -512,99 +621,82 @@ def mask_raster_from_layer(
     -------
         xr.Dataset, xr.DataArray: The grid with all of the data variables masked.
     """
+    # Skip masking if different grid
+    if data.sizes != mask.sizes:
+        logger.warning("Skipping masking due to different grid sizes.")
+        return data
+
     mask = mask != mask.raster.nodata
 
     if isinstance(data, xr.DataArray):
+<<<<<<< HEAD
         data = _mask_data_array(data)
     else:
         for var in data.data_vars:
             data[var] = _mask_data_array(data[var])
+=======
+        data = _mask_data_array(data, mask)
+    else:
+        for var in data.data_vars:
+            data[var] = _mask_data_array(data[var], mask)
+>>>>>>> v1.0.0rc2
 
     return data
 
 
-def _solve_var_name(var: str | dict, path: str, add: list):
-    """Solve the config file into individual entries.
-
-    Every entry is the entire path ("river.lateral.< something >") plus its value.
-
-    Parameters
-    ----------
-    var : str | dict,
-        Either the direct settings entry or a dictionary containing nested settings.
-    path : str,
-        Prepend the entries with the value (e.g. "lateral" or "lateral.river")
-    add : list
-        Usually an empty list in which the temporary headers are stored.
+def planar_operation_in_utm(
+    gdf: gpd.GeoDataFrame,
+    operation: Callable[[gpd.GeoSeries], Union[gpd.GeoSeries, gpd.GeoDataFrame]],
+) -> Union[gpd.GeoSeries, gpd.GeoDataFrame]:
     """
-    if not isinstance(var, dict):
-        sep = "." if path else ""
-        add_str = ".".join(add) if add else ""
-        yield (var, path + sep + add_str)
-        return
-    for key, item in var.items():
-        yield from _solve_var_name(item, path, add + [key])
+    Apply a planar geometric operation on a GeoDataFrame's geometry.
 
-
-def _convert_to_wflow_v1(
-    config: tomlkit.TOMLDocument,
-    wflow_vars: Dict,
-    states_vars: Dict,
-    model_options: Dict = {},
-    cross_options: Dict = {},  # TODO we shouldnt pass mutables as defaults
-    input_options: Dict = {},
-    input_variables: list = [],
-    additional_variables: Dict = {},
-    logger: logging.Logger = logger,
-) -> Dict:
-    """Convert the config to Wflow v1 format.
+    To ensure the operation is performed after converting to an appropriate UTM CRS,
+    then reprojected the result back to the original CRS.
 
     Parameters
     ----------
-    config: dict
-        The config to convert.
-    wflow_vars: dict
-        The Wflow variables dict to use for the conversion between versions.
-        Either WFLOW_NAMES or WFLOW_SEDIMENT_NAMES.
-    states_vars: dict
-        The Wflow states variables dict to use for the conversion between versions.
-        Either WFLOW_STATES_NAMES or WFLOW_SEDIMENT_STATES_NAMES.
-    model_options: dict, optional
-        Options in the [model] section of the TOML that were updated in Wflow v1.
-    input_options: dict, optional
-        Options in the [input] section of the TOML that were updated in Wflow v1.
-    input_variables: list, optional
-        Variables that were moved to input rather than input.static.
-    logger: logging.Logger, optional
-        The logger to use, by default logger.
+        gdf (GeoDataFrame): Input GeoDataFrame with a defined CRS.
+        operation (Callable): A function that operates on gdf.geometry, such as:
+                              lambda geom: geom.centroid, geom.buffer(...), etc.
 
     Returns
     -------
-    config_out: dict
-        The converted config.
+        GeoSeries or GeoDataFrame: Result of the operation, reprojected to the original
+        CRS.
+
+    Examples
+    --------
+        >>> import geopandas as gpd
+        >>> from shapely.geometry import (
+        ...     Point,
+        ... )
+        >>> gdf = gpd.GeoDataFrame(
+        ...     {
+        ...         "geometry": [
+        ...             Point(
+        ...                 1, 2
+        ...             )
+        ...         ]
+        ...     },
+        ...     crs="EPSG:4326",
+        ... )
+        >>> centroid = planar_operation_in_utm(
+        ...     gdf,
+        ...     lambda geom: geom.centroid,
+        ... )
+
     """
-    WFLOW_CONVERSION = {v["wflow_v0"]: v["wflow_v1"] for v in wflow_vars.values()}
-    for k, v in states_vars.items():
-        WFLOW_CONVERSION[v["wflow_v0"]] = v["wflow_v1"]
-    # Add a few extra output variables that are supported by the conversion
-    WFLOW_CONVERSION.update(additional_variables)
+    if gdf.crs is None:
+        raise ValueError("Input GeoDataFrame must have a defined CRS.")
 
-    # Logging function for the other non supported variables
-    def _warn_str(wflow_var, output_type):
-        logger.warning(
-            f"Output variable {wflow_var} not supported for the conversion. "
-            f"Skipping from {output_type} output."
-        )
+    original_crs = gdf.crs
+    utm_crs = gdf.estimate_utm_crs()
 
-    # Update function for the output.netcdf_grid
-    def _update_output_netcdf_grid(wflow_var, var_name):
-        if wflow_var in WFLOW_CONVERSION.keys():
-            config_out["output"]["netcdf_grid"]["variables"][
-                WFLOW_CONVERSION[wflow_var]
-            ] = var_name
-        else:
-            _warn_str(var_name, "netcdf_grid")
+    gdf_projected = gdf.to_crs(utm_crs)
+    result = operation(gdf_projected.geometry)
 
+<<<<<<< HEAD
     # Initialize the output config
     logger.info("Converting config to Wflow v1 format")
     logger.info("Converting config general, time and model sections")
@@ -963,3 +1055,11 @@ def convert_to_wflow_v1_sediment(
     )
 
     return config_out
+=======
+    if isinstance(result, gpd.GeoSeries):
+        return result.set_crs(utm_crs).to_crs(original_crs)
+    elif isinstance(result, gpd.GeoDataFrame):
+        return result.to_crs(original_crs)
+    else:
+        raise TypeError("Operation must return a GeoSeries or GeoDataFrame.")
+>>>>>>> v1.0.0rc2

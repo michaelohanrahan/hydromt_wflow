@@ -45,6 +45,9 @@ author = "Dirk Eilander"
 
 # The short version which is displayed
 version = hydromt_wflow.__version__
+bare_version = hydromt_wflow.__version__
+doc_version = bare_version[: bare_version.find("dev") - 1]
+
 
 # # -- Copy notebooks to include in docs -------
 if os.path.isdir("_examples"):
@@ -127,7 +130,7 @@ html_static_path = ["_static"]
 html_css_files = ["theme-deltares.css"]
 html_theme_options = {
     "show_nav_level": 2,
-    "navbar_align": "content",
+    "navbar_align": "left",
     "use_edit_page_button": True,
     "icon_links": [
         {
@@ -158,11 +161,16 @@ html_theme_options = {
     "logo": {
         "text": "HydroMT Wflow",
     },
+    "navbar_center": ["version-switcher", "navbar-nav"],
     "navbar_end": ["navbar-icon-links"],  # remove dark mode switch
+    "switcher": {
+        "json_url": "https://raw.githubusercontent.com/Deltares/hydromt_wflow/gh-pages/switcher.json",
+        "version_match": doc_version,}
+
 }
 
 html_context = {
-    "github_url": "https://github.com",  # or your GitHub Enterprise interprise
+    "github_url": "https://github.com",  # or your GitHub Enterprise
     "github_user": "Deltares",
     "github_repo": "hydromt_wflow",
     "github_version": "main",
@@ -286,5 +294,10 @@ nbsphinx_prolog = r"""
         </div>
 """
 
-# nbsphinx_execute = "always"
+nbsphinx_execute = "always"
 nbsphinx_timeout = 300
+linkcheck_ignore = [
+    r'https://localhost:\d+/',
+    'https://doi.org/10.1029/2018JG004881', # wiley blocks headless requests so this will be reported as broken
+    r'https://deltares.github.io/hydromt_wflow/.*'
+]

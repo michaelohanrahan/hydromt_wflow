@@ -1,11 +1,10 @@
 import logging
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 from hydromt.model import ModelRoot
-from tomlkit import TOMLDocument
-from tomlkit.items import Table
 
 from hydromt_wflow.components import WflowConfigComponent
 from hydromt_wflow.utils import DATADIR
@@ -24,9 +23,9 @@ def test_wflow_config_component_init(mock_model: MagicMock):
     # Assert that the internal data is None
     assert component._data is None
 
-    # When asking for data property, it should return a tomlkit document
-    assert isinstance(component.data, TOMLDocument)
-    assert isinstance(component._data, TOMLDocument)  # Same for internal
+    # When asking for data property, it should return a dictionary
+    assert isinstance(component.data, dict)
+    assert isinstance(component._data, dict)  # Same for internal
     assert len(component.data) == 0
 
 
@@ -44,9 +43,9 @@ def test_wflow_config_component_get(
     assert component.get_value("biem") == "bam"
     assert component.get_value("time") == {"sometime": "now"}
     assert isinstance(component.get_value("foo"), dict)
-    assert isinstance(component.data["foo"], Table)
+    assert isinstance(component.data["foo"], dict)
     assert component.get_value("foo.bar") == "baz"
-    assert component.get_value("foo", "bip") == "bop"
+    assert component.get_value("foo.bip") == "bop"
     assert component.get_value("no") is None
 
 
@@ -60,18 +59,7 @@ def test_wflow_config_component_set(mock_model: MagicMock):
     # Set an entry
     component.set("foo.bar", "baz")
     # Assert the content
-    assert isinstance(component._data, TOMLDocument)
-    assert component.data["foo"] == {"bar": "baz"}
-    assert len(component.data) == 1
-
-
-def test_wflow_config_component_set_alt(mock_model: MagicMock):
-    # Setup the component
-    component = WflowConfigComponent(mock_model)
-
-    # Set an entry
-    component.set("foo", "bar", "baz")
-    # Assert the content
+    assert isinstance(component._data, dict)
     assert component.data["foo"] == {"bar": "baz"}
     assert len(component.data) == 1
 
@@ -90,6 +78,37 @@ def test_wflow_config_component_update(mock_model: MagicMock):
     # Assert the content
     assert component.data["foo"] == {"bar": "baz"}
     assert len(component.data) == 2
+
+
+def test_wflow_config_component_remove(mock_model: MagicMock):
+    # Setup the component
+    component = WflowConfigComponent(mock_model)
+
+    # Update the config
+    component._data = {
+        "model": {
+            "river_routing": "kinematic_wave",
+            "land_routing": "kinematic_wave",
+        },
+        "time": "now",
+    }
+
+    assert component.get_value("model.river_routing") == "kinematic_wave"
+    # Remove a config entry
+    popped = component.remove("model.river_routing")
+    assert popped == "kinematic_wave"
+
+    # Check if it is removed
+    assert component.get_value("model.river_routing") is None
+    assert component.get_value("model") is not None
+
+    with pytest.raises(KeyError):
+        component.remove("model", "river_routing")
+
+    with pytest.raises(KeyError):
+        component.remove("model", "non_existing_key", "some_stuff")
+
+    assert component.remove("model.non_existing_key", errors="ignore") is None
 
 
 def test_wflow_config_component_read(
@@ -111,7 +130,7 @@ def test_wflow_config_component_read(
     component.read()
 
     # Assert the read data
-    assert isinstance(component.data, TOMLDocument)
+    assert isinstance(component.data, dict)
     assert len(component.data) == 7
     assert component.data["dir_output"] == "run_default"
     assert component.data["input"]
@@ -148,7 +167,7 @@ def test_wflow_config_component_read_default_read_mode(
     # Setup the component
     component = WflowConfigComponent(
         model=mock_model,
-        default_template_filename=Path(DATADIR, "wflow", "wflow_sbm.toml"),
+        default_template_filename=str(DATADIR / "wflow_sbm" / "wflow_sbm.toml"),
     )
     assert component._data is None  # Assert no data or structure yet
 
@@ -161,8 +180,9 @@ def test_wflow_config_component_read_default_write_mode(
     caplog: pytest.LogCaptureFixture,
     mock_model: MagicMock,
 ):
+    caplog.set_level(logging.INFO)
     # Reading the template only happens in w and w+ modes
-    # Set it to read mode
+    # Set it to write mode
     type(mock_model).root = PropertyMock(
         side_effect=lambda: ModelRoot(tmp_path, mode="w"),
     )
@@ -170,18 +190,14 @@ def test_wflow_config_component_read_default_write_mode(
     # Setup the component
     component = WflowConfigComponent(
         model=mock_model,
-        default_template_filename=Path(DATADIR, "wflow", "wflow_sbm.toml"),
+        default_template_filename=str(DATADIR / "wflow_sbm" / "wflow_sbm.toml"),
     )
     assert component._data is None  # Assert no data or structure yet
 
     # Read at init
     assert len(component.data) == 7
     assert component.data["dir_output"] == "run_default"
-    assert (
-        f"No config file found at {Path(tmp_path, component._filename).as_posix()} \
-defaulting to"
-        in caplog.text
-    )
+    assert "Reading default config file from " in caplog.text
 
 
 def test_wflow_config_component_read_warnings(
@@ -202,7 +218,7 @@ def test_wflow_config_component_read_warnings(
     component.read()
 
     # Check for the warning
-    assert "No default model config was found at" in caplog.text
+    assert "No config was found at" in caplog.text
     assert len(component.data) == 0
 
 
@@ -231,7 +247,7 @@ def test_wflow_config_component_write_warnings(
     caplog: pytest.LogCaptureFixture,
     mock_model: MagicMock,
 ):
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
     # Setup the component
     component = WflowConfigComponent(mock_model)
 
@@ -249,7 +265,8 @@ def test_wflow_config_component_equal(mock_model: MagicMock, config_dummy_data: 
 
     # Update them like a dummy to request
     component.update(config_dummy_data)
-    component2.update(config_dummy_data)
+    config_dummy_data2 = deepcopy(config_dummy_data)
+    component2.update(config_dummy_data2)
 
     # Assert these are equal
     eq, errors = component.test_equal(component2)

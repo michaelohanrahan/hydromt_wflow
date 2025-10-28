@@ -54,6 +54,9 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+tests/wflow_test_simple/
+tests/wflow_test_full/
+tests/wflow_test_sediment/
 
 # Translations
 *.mo
@@ -101,9 +104,15 @@ examples/wflow_piave_subbasin/staticmaps_updated.nc
 examples/wflow_piave_subbasin/wflow_sbm_updated.toml
 examples/data/wflow_upgrade/sbm/hydromt.log
 examples/data/wflow_upgrade/sbm/wflow_sbm_v1.toml
+examples/data/wflow_upgrade/sbm/staticmaps_v1.nc
+examples/data/wflow_upgrade/sbm/staticgeoms/region.geojson
 examples/data/wflow_upgrade/sediment/hydromt.log
 examples/data/wflow_upgrade/sediment/wflow_sediment_v1.toml
 examples/data/wflow_upgrade/sediment/staticmaps_v1.nc
+examples/data/wflow_upgrade/sediment/staticgeoms/region.geojson
+examples/*/hydromt_data.yml
+examples/*/reservoir_accuracy.csv
+examples/*/reservoir_timeseries_None.csv
 
 
 # pyenv
@@ -128,9 +137,6 @@ environment.yml
 # Spyder project settings
 .spyderproject
 .spyproject
-
-# VScode
-.vscode
 
 # PyCharm
 .idea

@@ -1,12 +1,14 @@
 import logging
+from pathlib import Path
 from typing import Callable
+from unittest.mock import MagicMock
 
 import geopandas as gpd
 import pytest
 from shapely.geometry import box, mapping
 
 from hydromt_wflow.components import WflowGeomsComponent
-from hydromt_wflow.wflow import WflowModel
+from hydromt_wflow.wflow_sbm import WflowSbmModel
 
 
 @pytest.fixture
@@ -26,7 +28,7 @@ def mock_geometry(mock_xy) -> gpd.GeoDataFrame:
 
 def test_wflow_geoms_component_init(mock_model_factory: Callable):
     # Setup the mocked model and component
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     component = WflowGeomsComponent(model)
 
     # Assert that the internal data is None
@@ -43,7 +45,7 @@ def test_wflow_geoms_component_get(
     mock_geometry: gpd.GeoDataFrame,
 ):
     # Set the mocked model and component
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     component = WflowGeomsComponent(model=model)
     component.set(geom=mock_geometry, name="geom")
 
@@ -57,7 +59,7 @@ def test_wflow_geoms_component_get(
 
 def test_wflow_geoms_component_get_errors(mock_model_factory: Callable):
     # Set the mocked model and component
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     component = WflowGeomsComponent(model=model)
 
     # Assert error on no being able to find a geometry dataset
@@ -74,7 +76,7 @@ def test_wflow_geoms_component_pop(
     caplog.at_level(logging.INFO)
 
     # Setup the mocked model and component
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     component = WflowGeomsComponent(model=model)
     component.set(geom=mock_geometry, name="geom")
 
@@ -93,7 +95,7 @@ def test_wflow_geoms_component_pop_errors(
 ):
     caplog.set_level(logging.WARNING)
     # Setup the mocked model and the component
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     component = WflowGeomsComponent(model=model)
 
     # Assert the error if the geometry dataset is not found
@@ -107,21 +109,26 @@ def test_wflow_geoms_component_set(
     mock_geometry: gpd.GeoDataFrame,
 ):
     # Initialize component
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     comp = WflowGeomsComponent(model=model)
 
     # Add geometry and write it to disk
     comp.set(mock_geometry, name="test_geom")
-    comp.write(dir_out=model.root.path)
+    model.components = {"geoms": comp}
+    # mock for dir_input check
+    type(comp.model.config).get_value = MagicMock(return_value="")
+    comp.write(folder="staticgeoms")
 
     # Confirm file was written
-    out_file = model.root.path / "test_geom.geojson"
+    out_file = Path(model.root.path, "staticgeoms", "test_geom.geojson")
     assert out_file.exists()
 
     # Create new instance and read
-    model: WflowModel = mock_model_factory(path=model.root.path, mode="r")
+    model: WflowSbmModel = mock_model_factory(path=model.root.path, mode="r")
     new_comp = WflowGeomsComponent(model=model)
-    new_comp.read(filename=str(out_file.with_name("{name}.geojson")))
+    # mock for dir_input check
+    type(new_comp.model.config).get_value = MagicMock(return_value="")
+    new_comp.read()
 
     # Check that the geometry matches
     gdf_read = new_comp.get("test_geom")
@@ -136,21 +143,27 @@ def test_wflow_geoms_component_read_with_pattern(
     mock_geometry: gpd.GeoDataFrame,
 ):
     # Write multiple geometries to disk
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     comp = WflowGeomsComponent(model=model)
     comp.set(mock_geometry, name="geom1")
     comp.set(mock_geometry, name="geom2")
-    comp.write(dir_out=model.root.path)
+    model.components = {"geoms": comp}
+    type(comp.model.config).get_value = MagicMock(return_value="")
+    comp.write(folder="staticgeoms")
 
     # Confirm files were written
-    outfiles = [model.root.path / f"{name}.geojson" for name in ["geom1", "geom2"]]
+    outfiles = [
+        model.root.path / "staticgeoms" / f"{name}.geojson"
+        for name in ["geom1", "geom2"]
+    ]
     for out_file in outfiles:
         assert out_file.exists(), f"File {out_file} was not created."
 
     # Read using a pattern
-    model: WflowModel = mock_model_factory(model.root.path, mode="r")
+    model: WflowSbmModel = mock_model_factory(model.root.path, mode="r")
     new_comp = WflowGeomsComponent(model=model)
-    new_comp.read(filename=str(model.root.path / "{name}.geojson"))
+    type(new_comp.model.config).get_value = MagicMock(return_value="")
+    new_comp.read()
 
     # Check that both geometries are read
     assert new_comp.get("geom1") is not None
@@ -162,13 +175,15 @@ def test_wflow_geoms_component_write_to_wgs84(
     mock_geometry: gpd.GeoDataFrame,
 ):
     # Initialize component
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     comp = WflowGeomsComponent(model=model)
+    model.components = {"geoms": comp}
     geom = mock_geometry.to_crs("EPSG:28992")
 
     # Add geometry and write it to disk in WGS84
     comp.set(geom, name="test_geom")
-    comp.write(dir_out=model.root.path, to_wgs84=True)
+    type(comp.model.config).get_value = MagicMock(return_value="")
+    comp.write(folder="", to_wgs84=True)
 
     # Confirm file was written
     out_file = model.root.path / "test_geom.geojson"
@@ -206,10 +221,13 @@ def test_wflow_geoms_component_write_precision_defaults(
     geometry = mock_geometry.to_crs(crs)
 
     # Initialize, write and read geometry
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     comp = WflowGeomsComponent(model=model)
     comp.set(geometry, name="test_geom")
-    comp.write(dir_out=model.root.path)
+    model.components = {"geoms": comp}
+
+    type(comp.model.config).get_value = MagicMock(return_value="")
+    comp.write(folder="")
     out_file = model.root.path / "test_geom.geojson"
     assert out_file.exists()
     gdf_read = gpd.read_file(out_file)
@@ -237,10 +255,12 @@ def test_wflow_geoms_component_write_precision_manual(
     precision: int,
 ):
     # Initialize, write and read geometry
-    model: WflowModel = mock_model_factory(mode="w")
+    model: WflowSbmModel = mock_model_factory(mode="w")
     comp = WflowGeomsComponent(model=model)
     comp.set(mock_geometry, name="test_geom")
-    comp.write(dir_out=model.root.path, precision=precision)
+    model.components = {"geoms": comp}
+    type(comp.model.config).get_value = MagicMock(return_value="")
+    comp.write(folder="", precision=precision)
     out_file = model.root.path / "test_geom.geojson"
     assert out_file.exists()
     gdf_read = gpd.read_file(out_file)

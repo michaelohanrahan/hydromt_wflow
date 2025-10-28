@@ -2,12 +2,12 @@
 
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-import tomlkit
+from hydromt.io.readers import read_toml
+from hydromt.io.writers import write_toml
 from hydromt.model import Model
-from hydromt.model.components.base import ModelComponent
-from tomlkit.toml_file import TOMLFile
+from hydromt.model.components import ConfigComponent
 
 from hydromt_wflow import utils
 from hydromt_wflow.components.utils import make_config_paths_relative
@@ -17,26 +17,21 @@ __all__ = ["WflowConfigComponent"]
 logger = logging.getLogger(f"hydromt.{__name__}")
 
 
-class WflowConfigComponent(ModelComponent):
+class WflowConfigComponent(ConfigComponent):
     """Manage the wflow TOML configuration file for model simulations/settings.
 
-    ``WflowConfigComponent`` data is stored in a tomlkit.TOMLDocument. The component
+    ``WflowConfigComponent`` data is stored in a dictionary. The component
     is used to prepare and update model simulations/settings of the wflow model.
-    TOML config files will be read and written using
-    `TOMLkit <https://tomlkit.readthedocs.io/en/latest/quickstart/>`__.
-    This package will preserve the order and comments in a TOML file. Note, that any
-    comments associated with sections that are to be updated will still disappear.
     """
 
     def __init__(
         self,
         model: Model,
         *,
-        filename="wflow_sbm.toml",
-        default_template_filename: Path | str | None = None,
+        filename: str = "wflow_sbm.toml",
+        default_template_filename: str | None = None,
     ):
-        """
-        Initialize a WflowConfigComponent.
+        """Manage configuration files for model simulations/settings.
 
         Parameters
         ----------
@@ -52,135 +47,124 @@ class WflowConfigComponent(ModelComponent):
             their own template file. This can be used by model plugins to provide a
             default configuration template. By default None.
         """
-        self._data: tomlkit.TOMLDocument[str, Any] | None = None
-        self._filename: str = filename
-        self._default_template_filename: Path | str | None = default_template_filename
+        super().__init__(
+            model,
+            filename=filename,
+            default_template_filename=default_template_filename,
+        )
 
-        super().__init__(model=model)
-
-    ## Private
     def _initialize(self, skip_read=False) -> None:
         """Initialize the model config."""
         if self._data is None:
-            self._data = tomlkit.TOMLDocument()
+            self._data = {}
             if not skip_read:
                 # no check for read mode here
                 # model config is read if in read-mode and it exists
                 # default config if in write-mode
                 self.read()
 
-    ## Properties
     @property
-    def data(self) -> tomlkit.TOMLDocument[str, Any]:
+    def data(self) -> dict:
         """Model config values."""
         if self._data is None:
             self._initialize()
         return self._data
 
-    ## I/O Methods
     def read(
         self,
-        path: Path | str | None = None,
+        filename: str | None = None,
     ):
-        """Read the wflow configuration file at <root>/{path}."""
+        """
+        Read the wflow configuration file from <root/filename>.
+
+        If filename is not provided, will default to <root>/{self._filename} or default
+        template configuration file if the model is in write only mode (ie build).
+
+        If filename is provided, it will check if the path is absolute and else will
+        assume the given path is relative to the model root.
+
+        """
         self._initialize(skip_read=True)
 
         # Check if user-defined path or template should be used
-        p = path or self._filename
-        read_path = Path(self.root.path, p)
-
-        # Switch to default if available and supplied config is not found
-        if (
-            not read_path.is_file()
-            and self._default_template_filename is not None
-            and not self.root.is_reading_mode()
-        ):
-            _new_path = Path(self.root.path, self._default_template_filename)
-            logger.warning(
-                f"No config file found at {read_path.as_posix()} \
-defaulting to {_new_path.as_posix()}"
-            )
-            read_path = _new_path
+        if not filename:
+            # Write only mode > read default config
+            if (
+                not self.root.is_reading_mode()
+                and self._default_template_filename is not None
+            ):
+                prefix = "default"
+                read_path = Path(self._default_template_filename)
+            else:
+                prefix = "model"
+                read_path = Path(self.root.path, self._filename)
+        else:
+            prefix = "user defined"
+            # Check if user-defined file is absolute (ie file exists)
+            if Path(filename).is_file():
+                read_path = Path(filename)
+            else:
+                read_path = Path(self.root.path, filename)
 
         # Check if the file exists
         if read_path.is_file():
-            logger.info(f"Reading model config file from {read_path.as_posix()}.")
+            logger.info(f"Reading {prefix} config file from {read_path.as_posix()}.")
         else:
             logger.warning(
-                f"No default model config was found at {read_path.as_posix()}. "
-                "It wil be initialized as empty TOMLDocument"
+                f"No config was found at {read_path.as_posix()}. "
+                "It wil be initialized as empty dict"
             )
             return
 
         # Read the data and set it in the document
-        data = TOMLFile(read_path).read()
-        # TODO figure out whether .update might be a good alternative
-        # Seems to not preserve the structure as well as direct setting
-        # But now it overwrites the already existing keys.
-        self._data = data
+        self._data = read_toml(read_path)
 
     def write(
         self,
-        path: Path | str | None = None,
+        filename: str | None = None,
+        config_root: Path | str | None = None,
     ):
-        """Write the wflow configurations to a file."""
+        """
+        Write the configuration to a file.
+
+        The file is written to ``<root>/<filename>`` by default, or to
+        ``<config_root>/<filename>`` if a ``config_root`` is provided.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Name of the config file. By default None to use the default name
+            self._filename.
+        config_root : str, optional
+            Root folder to write the config file if different from model root (default).
+            Can be absolute or relative to model root.
+        """
+        # Check for config_root
+        path = filename or self._filename
+        if config_root is not None:
+            path = Path(config_root, path)
+
         self.root._assert_write_mode()
         # If there is data
         if self.data:
             p = path or self._filename
 
-            # Sort the pathing
+            # Sort the path
             write_path = Path(self.root.path, p)
             logger.info(f"Writing model config to {write_path.as_posix()}.")
             write_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Solve the pathing in the data
+            # Solve the path in the data
             # Extra check for dir_input
             rel_path = Path(write_path.parent, self.get_value("dir_input", fallback=""))
             write_data = make_config_paths_relative(self.data, rel_path)
-
-            # Dump the toml
-            TOMLFile(write_path).write(write_data)
-
-        # Warn when there is no data being written
+            write_toml(write_path, write_data)
         else:
             logger.warning("Model config has no data, skip writing.")
 
-    ## Add data methods
-    def update(self, data: dict[str, Any]):
-        """Set the config dictionary at key(s) with values.
-
-        Parameters
-        ----------
-        data : dict[str, Any]
-            A dictionary with the values to be set. keys can be dotted like in
-            :py:meth:`~hydromt_wflow.components.config.WflowConfigComponent.set`
-
-        Examples
-        --------
-        Setting data as a nested dictionary::
-
-
-            >> self.update({'a': 1, 'b': {'c': {'d': 2}}})
-            >> self.data
-            {'a': 1, 'b': {'c': {'d': 2}}}
-
-        Setting data using dotted notation::
-
-            >> self.update({'a.d.f.g': 1, 'b': {'c': {'d': 2}}})
-            >> self.data
-            {'a': {'d':{'f':{'g': 1}}}, 'b': {'c': {'d': 2}}}
-
-        """
-        if len(data) > 0:
-            logger.debug("Setting model config options.")
-        for k, v in data.items():
-            self.set(k, v)
-
-    ## Modifying methods
     def get_value(
         self,
-        *args,
+        key: str,
         fallback: Any | None = None,
         abs_path: bool = False,
     ) -> Any | None:
@@ -188,9 +172,8 @@ defaulting to {_new_path.as_posix()}"
 
         Parameters
         ----------
-        args : tuple, str
-            Keys can given by multiple args: ('key1', 'key2')
-            or a string with '.' indicating a new level: ('key1.key2')
+        key : str
+            Keys are a string with '.' indicating a new level: ('key1.key2')
         fallback : Any, optional
             Fallback value if key(s) not found in config, by default None.
         abs_path: bool, optional
@@ -200,48 +183,65 @@ defaulting to {_new_path.as_posix()}"
         # Refer to utils function of get_config
         return utils.get_config(
             self.data,
-            *args,
+            key,
             root=self.root.path,
             fallback=fallback,
             abs_path=abs_path,
         )
 
-    def set(self, *args):
-        """Set the config options.
-
-        Parameters
-        ----------
-        args : str, tuple, list
-            If tuple or list, minimal length of two
-            keys can given by multiple args: ('key1', 'key2', 'value')
-            or a string with '.' indicating a new level: ('key1.key2', 'value')
+    def remove(self, *args: str, errors: str = "raise") -> Any:
         """
-        self._initialize()
-        # Refer to utils function of set_config
-        utils.set_config(self.data, *args)
-
-    # Testing
-    def test_equal(self, other: ModelComponent) -> tuple[bool, dict[str, str]]:
-        """Compare components based on content.
+        Remove a config key and return its value.
 
         Parameters
         ----------
-        other : ModelComponent
-            The component to compare against.
+        key: str, tuple[str, ...]
+            Key to remove from the config.
+            Can be a dotted toml string when providing a list of strings.
+        errors: str, optional
+            What to do if the key is not found. Can be "raise" (default) or "ignore".
 
         Returns
         -------
-        tuple[bool, dict[str, str]]
-            True if the components are equal, and a dict with the associated errors per
-            property checked.
+        The popped value, or raises a KeyError if the key is not found.
         """
-        eq, errors = super().test_equal(other)
-        if not eq:
-            return eq, errors
-        other_config = cast(WflowConfigComponent, other)
+        args = list(args)
+        if len(args) == 1 and "." in args[0]:
+            args = args[0].split(".") + args[1:]
 
-        # check on data equality
-        if self.data == other_config.data:
-            return True, {}
-        else:
-            return False, {"config": "Configs are not equal"}
+        current = self.data
+        for index, key in enumerate(args):
+            if current is None:
+                if errors == "ignore":
+                    return None
+                else:
+                    raise KeyError(f"Key {'.'.join(args)} not found in config.")
+
+            if index == len(args) - 1:
+                # Last key, pop it
+                if errors == "ignore":
+                    current = current.pop(key, None)
+                else:
+                    current = current.pop(key)
+                break
+
+            # Not the last key, go deeper
+            current = current.get(key)
+        return current
+
+    def remove_reservoirs(
+        self, input: list[str | None] = [], state: list[str | None] = []
+    ):
+        """Remove all reservoir related config options."""
+        # a. change reservoir__flag = true to false
+        self.set("model.reservoir__flag", False)
+        # b. remove reservoir state
+        for state_var in state:
+            if state_var is not None:
+                self.remove(f"state.variables.{state_var}", errors="ignore")
+        # c. remove reservoir input
+        for input_var in input:
+            if input_var is not None:
+                # find if variable in input/static/cyclic/forcing
+                input_var = utils.get_wflow_var_fullname(input_var, self.data)
+                self.remove(input_var, errors="ignore")

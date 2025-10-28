@@ -8,8 +8,8 @@ API reference
 
 .. _api_model:
 
-Wflow model class
-=================
+Wflow model classes
+===================
 
 Initialize
 ----------
@@ -17,52 +17,56 @@ Initialize
 .. autosummary::
    :toctree: _generated
 
-   WflowModel
+   WflowBaseModel
 
-.. _components:
+.. _components_base:
 
-Setup methods
--------------
+
+High level and I/O methods
+--------------------------
 
 .. autosummary::
    :toctree: _generated
 
-   WflowModel.setup_config
-   WflowModel.setup_basemaps
-   WflowModel.setup_rivers
-   WflowModel.setup_floodplains
-   WflowModel.setup_lakes
-   WflowModel.setup_reservoirs
-   WflowModel.setup_glaciers
-   WflowModel.setup_lulcmaps
-   WflowModel.setup_lulcmaps_from_vector
-   WflowModel.setup_lulcmaps_with_paddy
-   WflowModel.setup_laimaps
-   WflowModel.setup_laimaps_from_lulc_mapping
-   WflowModel.setup_allocation_areas
-   WflowModel.setup_allocation_surfacewaterfrac
-   WflowModel.setup_domestic_demand
-   WflowModel.setup_domestic_demand_from_population
-   WflowModel.setup_other_demand
-   WflowModel.setup_irrigation
-   WflowModel.setup_irrigation_from_vector
-   WflowModel.setup_ksathorfrac
-   WflowModel.setup_ksatver_vegetation
-   WflowModel.setup_rootzoneclim
-   WflowModel.setup_soilmaps
-   WflowModel.setup_outlets
-   WflowModel.setup_gauges
-   WflowModel.setup_areamap
-   WflowModel.setup_config_output_timeseries
-   WflowModel.setup_precip_forcing
-   WflowModel.setup_precip_from_point_timeseries
-   WflowModel.setup_temp_pet_forcing
-   WflowModel.setup_pet_forcing
-   WflowModel.setup_constant_pars
-   WflowModel.setup_1dmodel_connection
-   WflowModel.setup_grid_from_raster
-   WflowModel.setup_cold_states
-   WflowModel.upgrade_to_v1_wflow
+   WflowBaseModel.build
+   WflowBaseModel.update
+
+   WflowBaseModel.read
+   WflowBaseModel.write
+
+   WflowBaseModel.read_config
+   WflowBaseModel.write_config
+
+   WflowBaseModel.read_grid
+   WflowBaseModel.write_grid
+
+   WflowBaseModel.read_geoms
+   WflowBaseModel.write_geoms
+
+   WflowBaseModel.read_forcing
+   WflowBaseModel.write_forcing
+
+   WflowBaseModel.read_states
+   WflowBaseModel.write_states
+
+   WflowBaseModel.read_outputs
+
+
+Components
+----------
+
+.. autosummary::
+   :toctree: _generated
+
+   WflowBaseModel.config
+   WflowBaseModel.staticmaps
+   WflowBaseModel.forcing
+   WflowBaseModel.states
+   WflowBaseModel.tables
+   WflowBaseModel.geoms
+   WflowBaseModel.output_grid
+   WflowBaseModel.output_scalar
+   WflowBaseModel.output_csv
 
 High level and I/O methods
 --------------------------
@@ -117,11 +121,11 @@ Attributes
 .. autosummary::
    :toctree: _generated
 
-   WflowModel.crs
-   WflowModel.root
-   WflowModel.flwdir
-   WflowModel.basins
-   WflowModel.rivers
+   WflowBaseModel.crs
+   WflowBaseModel.root
+   WflowBaseModel.flwdir
+   WflowBaseModel.basins
+   WflowBaseModel.rivers
 
 Other general methods
 ---------------------
@@ -129,11 +133,86 @@ Other general methods
 .. autosummary::
    :toctree: _generated
 
-   WflowModel.set_config
-   WflowModel.get_config
-   WflowModel.set_staticmaps
-   WflowModel.set_tables
-   WflowModel.set_states
+   WflowBaseModel.set_config
+   WflowBaseModel.get_config
+   WflowBaseModel.set_forcing
+   WflowBaseModel.set_grid
+   WflowBaseModel.set_geoms
+   WflowBaseModel.set_states
+
+Setup methods
+-------------
+
+.. autosummary::
+   :toctree: _generated
+
+   WflowBaseModel.setup_config
+   WflowBaseModel.setup_config_output_timeseries
+   WflowBaseModel.setup_basemaps
+   WflowBaseModel.setup_rivers
+   WflowBaseModel.setup_riverwidth
+   WflowBaseModel.setup_lulcmaps
+   WflowBaseModel.setup_lulcmaps_from_vector
+   WflowBaseModel.setup_outlets
+   WflowBaseModel.setup_gauges
+   WflowBaseModel.setup_constant_pars
+   WflowBaseModel.setup_grid_from_raster
+   WflowBaseModel.setup_areamap
+
+
+Initialize
+----------
+
+.. autosummary::
+   :toctree: _generated
+
+   WflowSbmModel
+
+.. _components_sbm:
+
+Setup methods
+-------------
+
+.. autosummary::
+   :toctree: _generated
+
+   WflowSbmModel.setup_config
+   WflowSbmModel.setup_basemaps
+   WflowSbmModel.setup_rivers
+   WflowSbmModel.setup_floodplains
+   WflowSbmModel.setup_reservoirs_no_control
+   WflowSbmModel.setup_reservoirs_simple_control
+   WflowSbmModel.setup_glaciers
+   WflowSbmModel.setup_lulcmaps
+   WflowSbmModel.setup_lulcmaps_from_vector
+   WflowSbmModel.setup_lulcmaps_with_paddy
+   WflowSbmModel.setup_laimaps
+   WflowSbmModel.setup_laimaps_from_lulc_mapping
+   WflowSbmModel.setup_allocation_areas
+   WflowSbmModel.setup_allocation_surfacewaterfrac
+   WflowSbmModel.setup_domestic_demand
+   WflowSbmModel.setup_domestic_demand_from_population
+   WflowSbmModel.setup_other_demand
+   WflowSbmModel.setup_irrigation
+   WflowSbmModel.setup_irrigation_from_vector
+   WflowSbmModel.setup_ksathorfrac
+   WflowSbmModel.setup_ksatver_vegetation
+   WflowSbmModel.setup_rootzoneclim
+   WflowSbmModel.setup_soilmaps
+   WflowSbmModel.setup_outlets
+   WflowSbmModel.setup_gauges
+   WflowSbmModel.setup_areamap
+   WflowSbmModel.setup_config_output_timeseries
+   WflowSbmModel.setup_precip_forcing
+   WflowSbmModel.setup_precip_from_point_timeseries
+   WflowSbmModel.setup_temp_pet_forcing
+   WflowSbmModel.setup_pet_forcing
+   WflowSbmModel.setup_constant_pars
+   WflowSbmModel.setup_1dmodel_connection
+   WflowSbmModel.setup_grid_from_raster
+   WflowSbmModel.setup_cold_states
+   WflowSbmModel.upgrade_to_v1_wflow
+   WflowSbmModel.clip
 
 .. _api_model_sediment:
 
@@ -159,12 +238,10 @@ Setup components
    WflowSedimentModel.setup_config
    WflowSedimentModel.setup_basemaps
    WflowSedimentModel.setup_rivers
-   WflowSedimentModel.setup_lakes
+   WflowSedimentModel.setup_natural_reservoirs
    WflowSedimentModel.setup_reservoirs
    WflowSedimentModel.setup_lulcmaps
    WflowSedimentModel.setup_lulcmaps_from_vector
-   WflowSedimentModel.setup_laimaps
-   WflowSedimentModel.setup_laimaps_from_lulc_mapping
    WflowSedimentModel.setup_canopymaps
    WflowSedimentModel.setup_soilmaps
    WflowSedimentModel.setup_riverwidth
@@ -176,74 +253,12 @@ Setup components
    WflowSedimentModel.setup_constant_pars
    WflowSedimentModel.setup_grid_from_raster
    WflowSedimentModel.upgrade_to_v1_wflow
-
-High level and I/O methods
---------------------------
-
-.. autosummary::
-   :toctree: _generated
-
-   WflowSedimentModel.build
-   WflowSedimentModel.update
-
-   WflowSedimentModel.read
-   WflowSedimentModel.write
-
-   WflowSedimentModel.read_config
-   WflowSedimentModel.write_config
-
-   WflowSedimentModel.read_staticmaps
-   WflowSedimentModel.write_staticmaps
-   WflowSedimentModel.clip_staticmaps
-
-   WflowSedimentModel.read_geoms
-   WflowSedimentModel.write_geoms
-
-   WflowSedimentModel.read_forcing
-   WflowSedimentModel.write_forcing
-   WflowSedimentModel.clip_forcing
-
-   WflowSedimentModel.read_states
-   WflowSedimentModel.write_states
-
-   WflowSedimentModel.read_results
-
-Components
-----------
-
-.. autosummary::
-   :toctree: _generated
-
-   WflowSedimentModel.config
-   WflowSedimentModel.staticmaps
-
-Attributes
-----------
-
-.. autosummary::
-   :toctree: _generated
-
-   WflowSedimentModel.crs
-   WflowSedimentModel.root
-   WflowSedimentModel.flwdir
-   WflowSedimentModel.basins
-   WflowSedimentModel.rivers
-
-Other general methods
----------------------
-
-.. autosummary::
-   :toctree: _generated
-
-   WflowSedimentModel.set_config
-   WflowSedimentModel.get_config
-   WflowSedimentModel.set_staticmaps
-   WflowSedimentModel.set_states
+   WflowSedimentModel.clip
 
 .. _data_containers:
 
-WflowModel components
-=====================
+WflowBaseModel components
+=========================
 
 WflowConfigComponent
 --------------------
@@ -254,9 +269,30 @@ WflowConfigComponent
    components.WflowConfigComponent
    components.WflowConfigComponent.data
    components.WflowConfigComponent.get_value
+   components.WflowConfigComponent.remove
+
+WflowStaticmapsComponent
+------------------------
+
+.. autosummary::
+   :toctree: _generated
+
+   components.WflowStaticmapsComponent
+   components.WflowStaticmapsComponent.data
+   components.WflowStaticmapsComponent.drop_vars
+
+WflowForcingComponent
+------------------------
+
+.. autosummary::
+   :toctree: _generated
+
+   components.WflowForcingComponent
+   components.WflowForcingComponent.data
 
 WflowGeomsComponent
 -------------------
+
 .. autosummary::
    :toctree: _generated
 
@@ -273,14 +309,44 @@ WflowStatesComponent
    components.WflowStatesComponent
    components.WflowStatesComponent.data
 
-WflowStaticmapsComponent
+WflowTablesComponent
+--------------------
+
+.. autosummary::
+   :toctree: _generated
+
+   components.WflowTablesComponent
+   components.WflowTablesComponent.data
+
+WflowOutputGridComponent
 ------------------------
 
 .. autosummary::
    :toctree: _generated
 
-   components.WflowStaticmapsComponent
-   components.WflowStaticmapsComponent.data
+   components.WflowOutputGridComponent
+   components.WflowOutputGridComponent.data
+   components.WflowOutputGridComponent.read
+
+WflowOutputScalarComponent
+---------------------------
+
+.. autosummary::
+   :toctree: _generated
+
+   components.WflowOutputScalarComponent
+   components.WflowOutputScalarComponent.data
+   components.WflowOutputScalarComponent.read
+
+WflowOutputCsvComponent
+------------------------
+
+.. autosummary::
+   :toctree: _generated
+
+   components.WflowOutputCsvComponent
+   components.WflowOutputCsvComponent.data
+   components.WflowOutputCsvComponent.read
 
 .. _workflows:
 
@@ -315,9 +381,13 @@ Wflow workflows
    workflows.soilgrids_sediment
    workflows.soilgrids_brooks_corey
    workflows.update_soil_with_paddy
-   workflows.waterbodymaps
-   workflows.reservoirattrs
-   workflows.lakeattrs
+   workflows.reservoir_id_maps
+   workflows.reservoir_simple_control_parameters
+   workflows.reservoir_parameters
+   workflows.merge_reservoirs
+   workflows.merge_reservoirs_sediment
+   workflows.create_reservoirs_geoms
+   workflows.create_reservoirs_geoms_sediment
    workflows.glaciermaps
    workflows.glacierattrs
    workflows.rootzoneclim
@@ -336,7 +406,7 @@ Input/Output methods
 .. autosummary::
    :toctree: _generated
 
-   utils.read_csv_results
+   utils.read_csv_output
 
 Utility methods
 ---------------

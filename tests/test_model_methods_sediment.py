@@ -2,17 +2,19 @@
 
 from os.path import abspath, dirname, join
 
+import geopandas as gpd
 import numpy as np
 import pytest
+
+from hydromt_wflow.utils import planar_operation_in_utm
 
 TESTDATADIR = join(dirname(abspath(__file__)), "data")
 EXAMPLEDIR = join(dirname(abspath(__file__)), "..", "examples")
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
-def test_setup_lulc_sed(example_sediment_model, planted_forest_testdata):
+def test_setup_lulc_sed(
+    example_sediment_model, planted_forest_testdata: gpd.GeoDataFrame
+):
     example_sediment_model.setup_lulcmaps(
         lulc_fn="globcover_2009",
         lulc_mapping_fn="globcover_mapping_default",
@@ -22,8 +24,12 @@ def test_setup_lulc_sed(example_sediment_model, planted_forest_testdata):
         orchard_name="Orchard",
         orchard_c=0.2188,
     )
-    da = example_sediment_model.grid["erosion_usle_c"].raster.sample(
-        planted_forest_testdata.geometry.centroid
+
+    centroid = planar_operation_in_utm(
+        planted_forest_testdata, lambda geom: geom.centroid
+    )
+    da = example_sediment_model.staticmaps.data["erosion_usle_c"].raster.sample(
+        centroid
     )
 
     # Strict equality checking is okay here because no processing is actually happening
@@ -48,7 +54,7 @@ def test_setup_lulc_vector(
         save_raster_lulc=False,
         planted_forest_c=0.0881,
     )
-    assert "erosion_usle_c" in example_sediment_model.grid
+    assert "erosion_usle_c" in example_sediment_model.staticmaps.data
 
 
 @pytest.mark.skip(
@@ -57,7 +63,9 @@ def test_setup_lulc_vector(
 def test_setup_soilmaps_sed(
     example_sediment_model,
 ):
-    values = example_sediment_model.grid["erosion_usle_k"].raster.mask_nodata()
+    values = example_sediment_model.staticmaps.data[
+        "erosion_usle_k"
+    ].raster.mask_nodata()
     mean_val = values.mean().values
     assert np.isclose(mean_val, 0.022215, atol=1e-6)
 
@@ -66,7 +74,7 @@ def test_setup_soilmaps_sed(
         usle_k_method="epic",
         add_aggregates=False,
     )
-    da = example_sediment_model.grid
+    da = example_sediment_model.staticmaps.data
 
     values = da["erosion_usle_k"].raster.mask_nodata()
     mean_val = values.mean().values

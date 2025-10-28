@@ -1,21 +1,22 @@
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 import xarray as xr
 
 from hydromt_wflow.components import WflowStatesComponent
-from hydromt_wflow.wflow import WflowModel
+from hydromt_wflow.wflow_sbm import WflowSbmModel
 
 
 @pytest.fixture
-def mock_model(mock_model_factory) -> WflowModel:
-    """Fixture to create a mock WflowModel."""
+def mock_model(mock_model_factory) -> WflowSbmModel:
+    """Fixture to create a mock WflowSbmModel."""
     return mock_model_factory(mode="w")
 
 
-def test_wflow_states_component_init(mock_model: WflowModel):
+def test_wflow_states_component_init(mock_model: WflowSbmModel):
     # Setup the component
     component = WflowStatesComponent(mock_model)
 
@@ -28,7 +29,7 @@ def test_wflow_states_component_init(mock_model: WflowModel):
     assert len(component.data) == 0
 
 
-def test_wflow_states_component_init_with_region(mock_model_staticmaps: WflowModel):
+def test_wflow_states_component_init_with_region(mock_model_staticmaps: WflowSbmModel):
     # Setup the component with a region component
     component = WflowStatesComponent(
         mock_model_staticmaps, region_component="staticmaps"
@@ -40,7 +41,7 @@ def test_wflow_states_component_init_with_region(mock_model_staticmaps: WflowMod
 
 
 def test_wflow_states_component_set(
-    mock_model_staticmaps: WflowModel, grid_dummy_data: xr.DataArray
+    mock_model_staticmaps: WflowSbmModel, grid_dummy_data: xr.DataArray
 ):
     # Setup the component
     component = WflowStatesComponent(
@@ -61,7 +62,7 @@ def test_wflow_states_component_set(
 
 
 def test_wflow_states_component_set_alt(
-    mock_model_staticmaps: WflowModel, grid_dummy_data: xr.DataArray
+    mock_model_staticmaps: WflowSbmModel, grid_dummy_data: xr.DataArray
 ):
     # Setup the component
     component = WflowStatesComponent(
@@ -77,7 +78,7 @@ def test_wflow_states_component_set_alt(
 
 
 def test_wflow_states_component_set_errors(
-    mock_model_staticmaps: WflowModel, grid_dummy_data: xr.DataArray
+    mock_model_staticmaps: WflowSbmModel, grid_dummy_data: xr.DataArray
 ):
     # Setup the component
     component = WflowStatesComponent(
@@ -100,7 +101,7 @@ def test_wflow_states_component_set_errors(
 
 
 def test_wflow_states_component_read(
-    mock_model_factory: Callable[[Path, str], WflowModel],
+    mock_model_factory: Callable[[Path, str], WflowSbmModel],
     model_subbasin_cached: Path,
 ):
     # Set it to read mode
@@ -113,16 +114,17 @@ def test_wflow_states_component_read(
     assert component._data is None
 
     # Read the data
+    type(component.model.config).get_value = MagicMock(return_value="")
     component.read()
 
     # Assert the read data
     assert isinstance(component.data, xr.Dataset)
-    assert len(component.data) == 14
+    assert len(component.data) == 13
     assert "river_instantaneous_q" in component.data
 
 
 def test_wflow_states_component_read_init(
-    mock_model_factory: Callable[[Path, str], WflowModel],
+    mock_model_factory: Callable[[Path, str], WflowSbmModel],
     model_subbasin_cached: Path,
 ):
     # Set it to read mode
@@ -130,22 +132,26 @@ def test_wflow_states_component_read_init(
 
     # Setup the component
     component = WflowStatesComponent(mock_model)
+    type(component.model.config).get_value = MagicMock(return_value="")
     assert component._data is None  # Assert no data or structure yet
 
     # Read at init
-    assert len(component.data) == 14
+    assert len(component.data) == 13
     assert "river_instantaneous_q" in component.data
 
 
 def test_wflow_states_component_write(
-    mock_model: WflowModel,
+    mock_model: WflowSbmModel,
     grid_dummy_data: xr.DataArray,
 ):
     # Setup the component
     component = WflowStatesComponent(mock_model)
+    mock_model.components = {"states": component}
+
     component._data = grid_dummy_data.to_dataset(name="test_layer")
 
     # Write to a file
+    type(component.model.config).get_value = MagicMock(return_value="")  # dir_input
     component.write()
 
     # Check if the file was created and has the expected content
@@ -160,7 +166,7 @@ def test_wflow_states_component_write(
 
 
 def test_wflow_states_component_equal(
-    mock_model: WflowModel,
+    mock_model: WflowSbmModel,
     grid_dummy_data: xr.DataArray,
 ):
     # Setup the components
@@ -181,5 +187,5 @@ def test_wflow_states_component_equal(
     # Assert unequal
     eq, errors = component.test_equal(component2)
     assert eq is False
-    assert "Data variables only on the right object" in errors["data"]
-    assert "test_layer" in errors["data"]
+    assert "Other grid has additional maps" in errors
+    assert "test_layer" in errors["Other grid has additional maps"]
