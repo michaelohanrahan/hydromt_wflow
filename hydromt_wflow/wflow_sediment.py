@@ -9,22 +9,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from hydromt import hydromt_step
-<<<<<<< HEAD
-
-from hydromt_wflow import workflows
-from hydromt_wflow.naming import (
-    _create_hydromt_wflow_mapping_sediment,
-)
-from hydromt_wflow.utils import (
-    DATADIR,
-    convert_to_wflow_v1_sediment,
-)
-from hydromt_wflow.wflow import WflowModel
-
-__all__ = ["WflowSedimentModel"]
-__hydromt_eps__ = ["WflowSedimentModel"]
-logger = logging.getLogger(__name__)
-=======
 from hydromt.error import NoDataStrategy
 
 import hydromt_wflow.utils as utils
@@ -39,7 +23,6 @@ from hydromt_wflow.wflow_base import WflowBaseModel
 __all__ = ["WflowSedimentModel"]
 __hydromt_eps__ = ["WflowSedimentModel"]
 logger = logging.getLogger(f"hydromt.{__name__}")
->>>>>>> v1.0.0rc2
 
 
 class WflowSedimentModel(WflowBaseModel):
@@ -50,24 +33,14 @@ class WflowSedimentModel(WflowBaseModel):
     def __init__(
         self,
         root: str | None = None,
-<<<<<<< HEAD
-        config_fn: str | None = None,
-        mode: str | None = "w",
-        data_libs: List | str = [],
-=======
         config_filename: str | None = None,
         mode: str = "w",
         data_libs: list | str = [],
->>>>>>> v1.0.0rc2
         **catalog_keys,
     ):
         super().__init__(
             root=root,
-<<<<<<< HEAD
-            config_fn=config_fn,
-=======
             config_filename=config_filename,
->>>>>>> v1.0.0rc2
             mode=mode,
             data_libs=data_libs,
             **catalog_keys,
@@ -164,84 +137,21 @@ class WflowSedimentModel(WflowBaseModel):
             files. Users should provide the Wflow.jl variable name followed by the name
             in the netcdf file.
         """
-<<<<<<< HEAD
-        logger.info("Preparing river maps.")
-        # update self._MAPS and self._WFLOW_NAMES with user defined output names
-        self._update_naming(output_names)
-
-        # Check that river_upa threshold is bigger than the maximum uparea in the grid
-        if river_upa > float(self.grid[self._MAPS["uparea"]].max()):
-            raise ValueError(
-                f"river_upa threshold {river_upa} should be larger than the maximum \
-uparea in the grid {float(self.grid[self._MAPS['uparea']].max())} in order to create \
-river cells."
-            )
-
-        # read data
-        ds_hydro = self.data_catalog.get_rasterdataset(
-            hydrography_fn, geom=self.region, buffer=10
-        )
-        ds_hydro.coords["mask"] = ds_hydro.raster.geometry_mask(self.region)
-
-        # get rivmsk, rivlen, rivslp
-        # read model maps and revert wflow to hydromt map names
-        inv_rename = {v: k for k, v in self._MAPS.items() if v in self.grid}
-        ds_riv = workflows.river(
-            ds=ds_hydro,
-            ds_model=self.grid.rename(inv_rename),
-=======
         super().setup_rivers(
             hydrography_fn=hydrography_fn,
             river_geom_fn=river_geom_fn,
->>>>>>> v1.0.0rc2
             river_upa=river_upa,
             slope_len=slope_len,
             min_rivlen_ratio=min_rivlen_ratio,
-<<<<<<< HEAD
-            logger=logger,
-        )[0]
-
-        ds_riv["rivmsk"] = ds_riv["rivmsk"].assign_attrs(
-            river_upa=river_upa, slope_len=slope_len, min_rivlen_ratio=min_rivlen_ratio
-=======
             smooth_len=smooth_len,
             min_rivwth=min_rivwth,
             rivdph_method=None,
             min_rivdph=None,
             output_names=output_names,
->>>>>>> v1.0.0rc2
         )
 
-<<<<<<< HEAD
-        # get rivwth
-        if river_geom_fn is not None:
-            gdf_riv = self.data_catalog.get_geodataframe(
-                river_geom_fn, geom=self.region
-            )
-            # re-read model data to get river maps
-            inv_rename = {v: k for k, v in self._MAPS.items() if v in self.grid}
-            ds_riv1 = workflows.river_bathymetry(
-                ds_model=self.grid.rename(inv_rename),
-                gdf_riv=gdf_riv,
-                smooth_len=smooth_len,
-                min_rivwth=min_rivwth,
-                logger=logger,
-            )
-            # only add river width
-            self.set_grid(ds_riv1["rivwth"], name=self._MAPS["rivwth"])
-            # update config
-            self._update_config_variable_name(self._MAPS["rivwth"])
-
-        logger.debug("Adding rivers vector to geoms.")
-        self.geoms.pop("rivers", None)  # remove old rivers if in geoms
-        self.rivers  # add new rivers to geoms
-
-    @hydromt_step
-    def setup_lakes(
-=======
     @hydromt_step
     def setup_riverbedsed(
->>>>>>> v1.0.0rc2
         self,
         bedsed_mapping_fn: str | Path | pd.DataFrame | None = None,
         strord_name: str = "meta_streamorder",
@@ -292,22 +202,6 @@ river cells."
             Dictionary with output names that will be used in the model netcdf input
             files. Users should provide the Wflow.jl variable name followed by the name
             in the netcdf file.
-<<<<<<< HEAD
-        geom_name : str, optional
-            Name of the lakes geometry in the staticgeoms folder, by default 'lakes'
-            for lakes.geojson.
-        kwargs: optional
-            Keyword arguments passed to the method
-            hydromt.DataCatalog.get_rasterdataset()
-        """
-        # Derive lake are and outlet maps
-        gdf_lakes, ds_lakes = self._setup_waterbodies(
-            lakes_fn, "lake", min_area, **kwargs
-        )
-        if ds_lakes is None:
-            logger.info("Skipping method, as no data has been found")
-            return
-=======
         """  # noqa: E501
         logger.info("Preparing riverbedsed parameter maps.")
         # check for streamorder
@@ -320,7 +214,6 @@ river cells."
             else:
                 self._MAPS["strord"] = strord_name
         # update self._MAPS and self._WFLOW_NAMES with user defined output names
->>>>>>> v1.0.0rc2
         self._update_naming(output_names)
 
         # Make river_bed_sediment_d50 map from csv file with mapping between streamorder
@@ -353,21 +246,8 @@ river cells."
         # update config
         self._update_config_variable_name(ds_riversed.rename(rmdict).data_vars)
 
-<<<<<<< HEAD
-        # Lake settings in the toml to update
-        self.set_config("model.lake__flag", True)
-        for dvar in ds_lakes.data_vars:
-            if dvar == "lake_area_id" or dvar == "lake_outlet_id":
-                self._update_config_variable_name(self._MAPS[dvar], data_type=None)
-            elif dvar in self._WFLOW_NAMES:
-                self._update_config_variable_name(self._MAPS[dvar])
-
-    @hydromt_step
-    def setup_reservoirs(
-=======
     @hydromt_step
     def setup_natural_reservoirs(
->>>>>>> v1.0.0rc2
         self,
         reservoirs_fn: str | Path | gpd.GeoDataFrame,
         overwrite_existing: bool = False,
@@ -440,10 +320,6 @@ river cells."
         * **reservoir_area_id** map: reservoir IDs [-]
         * **reservoir_outlet_id** map: reservoir IDs at outlet locations [-]
         * **reservoir_area** map: reservoir area [m2]
-<<<<<<< HEAD
-        * **reservoir_trapping_efficiency** map: reservoir trapping efficiency \
-coefficient [-]
-=======
         * **reservoir_trapping_efficiency** map: reservoir bedload trapping efficiency
           coefficient [-] (0 for natural lakes, 0-1 depending on the type of dam)
         * **meta_reservoirs** geom: polygon with reservoirs and parameters
@@ -452,7 +328,6 @@ coefficient [-]
         Required setup methods:
 
         * :py:meth:`~WflowSedimentModel.setup_rivers`
->>>>>>> v1.0.0rc2
 
         Parameters
         ----------
@@ -509,11 +384,7 @@ coefficient [-]
             uparea_name=self._MAPS["uparea"],
         )
         if ds_res is None:
-<<<<<<< HEAD
-            logger.info("Skipping method, as no data has been found")
-=======
             # No reservoir of sufficient size found
->>>>>>> v1.0.0rc2
             return
         self._update_naming(output_names)
 
@@ -578,116 +449,6 @@ coefficient [-]
                 self._update_config_variable_name(self._MAPS[dvar])
 
     @hydromt_step
-<<<<<<< HEAD
-    def setup_outlets(
-        self,
-        river_only: bool = True,
-        toml_output: str = "csv",
-        gauge_toml_header: List[str] = ["suspended_solids"],
-        gauge_toml_param: List[str] = [
-            "river_water_sediment~suspended__mass_concentration",
-        ],
-    ):
-        """Set the default gauge map based on basin outlets.
-
-        If the subcatchment map is available, the catchment outlets IDs will be matching
-        the subcatchment IDs. If not, then IDs from 1 to number of outlets are used.
-
-        Can also add csv/netcdf_scalar output settings in the TOML.
-
-        Adds model layers:
-
-        * **outlets** map: IDs map from catchment outlets [-]
-        * **outlets** geom: polygon of catchment outlets
-
-        Parameters
-        ----------
-        river_only : bool, optional
-            Only derive outlet locations if they are located on a river instead of
-            locations for all catchments, by default True.
-        toml_output : str, optional
-            One of ['csv', 'netcdf_scalar', None] to update [output.csv] or
-            [output.netcdf_scalar] section of wflow toml file or do nothing. By
-            default, 'csv'.
-        gauge_toml_header : list, optional
-            Save specific model parameters in csv section. This option defines
-            the header of the csv file.
-            By default saves suspended_solids (for
-            river_water_sediment~suspended__mass_concentration).
-        gauge_toml_param: list, optional
-            Save specific model parameters in csv section. This option defines
-            the wflow variable corresponding to the names in gauge_toml_header.
-            By default saves river_water_sediment~suspended__mass_concentration (for
-            suspended_solids).
-        """
-        super().setup_outlets(
-            river_only=river_only,
-            toml_output=toml_output,
-            gauge_toml_header=gauge_toml_header,
-            gauge_toml_param=gauge_toml_param,
-        )
-
-    @hydromt_step
-    def setup_gauges(
-        self,
-        gauges_fn: str | Path | gpd.GeoDataFrame,
-        index_col: str | None = None,
-        snap_to_river: bool = True,
-        mask: np.ndarray | None = None,
-        snap_uparea: bool = False,
-        max_dist: float = 10e3,
-        wdw: int = 3,
-        rel_error: float = 0.05,
-        abs_error: float = 50.0,
-        fillna: bool = False,
-        derive_subcatch: bool = False,
-        basename: str | None = None,
-        toml_output: str | None = "csv",
-        gauge_toml_header: List[str] | None = ["river_q", "suspended_solids"],
-        gauge_toml_param: List[str] | None = [
-            "river_water__volume_flow_rate",
-            "river_water_sediment~suspended__mass_concentration",
-        ],
-        **kwargs,
-    ):
-        """Set a gauge map based on ``gauges_fn`` data.
-
-        This function directly calls the ``setup_gauges`` function of the WflowModel,
-        see py:meth:`hydromt_wflow.wflow.WflowModel.setup_gauges` for more details.
-
-        The only differences are the default values for the arguments:
-
-        - ``gauge_toml_header`` defaults to ["river_q", "suspended_solids"]
-        - ``gauge_toml_param`` defaults to ["river_water__volume_flow_rate",
-            "river_water_sediment~suspended__mass_concentration"]
-
-        See Also
-        --------
-        WflowModel.setup_gauges
-        """
-        # # Add new outputcsv section in the config
-        super().setup_gauges(
-            gauges_fn=gauges_fn,
-            index_col=index_col,
-            snap_to_river=snap_to_river,
-            mask=mask,
-            snap_uparea=snap_uparea,
-            max_dist=max_dist,
-            wdw=wdw,
-            rel_error=rel_error,
-            abs_error=abs_error,
-            fillna=fillna,
-            derive_subcatch=derive_subcatch,
-            basename=basename,
-            toml_output=toml_output,
-            gauge_toml_header=gauge_toml_header,
-            gauge_toml_param=gauge_toml_param,
-            **kwargs,
-        )
-
-    @hydromt_step
-=======
->>>>>>> v1.0.0rc2
     def setup_lulcmaps(
         self,
         lulc_fn: str | Path | xr.DataArray,
@@ -723,15 +484,6 @@ coefficient [-]
 
         Adds model layers:
 
-<<<<<<< HEAD
-        * **landuse** map: Landuse class [-]
-            Original source dependent LULC class, resampled using nearest neighbour.
-        * **erosion_usle_c** map: Cover management factor from the USLE equation [-]
-        * **soil_compacted_fraction** map: The fraction of compacted or urban area per \
-grid cell [-]
-        * **land_water_fraction** map: The fraction of water covered area per grid \
-cell [-]
-=======
             * **landuse** map: Landuse class [-]
                 Original source dependent LULC class, resampled using nearest neighbour.
             * **erosion_usle_c** map: Cover management factor from the USLE equation [-]
@@ -743,7 +495,6 @@ cell [-]
         Required setup methods:
 
         * :py:meth:`~WflowSedimentModel.setup_basemaps`
->>>>>>> v1.0.0rc2
 
         Parameters
         ----------
@@ -811,10 +562,6 @@ cell [-]
                 planted_forest_c=planted_forest_c,
                 orchard_name=orchard_name,
                 orchard_c=orchard_c,
-<<<<<<< HEAD
-                logger=logger,
-=======
->>>>>>> v1.0.0rc2
             )
 
             # Add to grid
@@ -954,116 +701,12 @@ cell [-]
                 planted_forest_c=planted_forest_c,
                 orchard_name=orchard_name,
                 orchard_c=orchard_c,
-<<<<<<< HEAD
-                logger=logger,
-=======
->>>>>>> v1.0.0rc2
             )
 
             # Add to grid
             self.set_grid(usle_c, name=self._MAPS["usle_c"])
 
     @hydromt_step
-<<<<<<< HEAD
-    def setup_riverbedsed(
-        self,
-        bedsed_mapping_fn: str | Path | pd.DataFrame | None = None,
-        strord_name: str = "meta_streamorder",
-        output_names: Dict = {
-            "river_bottom-and-bank_sediment__median_diameter": "river_bed_sediment_d50",
-            "river_bottom-and-bank_clay__mass_fraction": "river_bed_clay_fraction",
-            "river_bottom-and-bank_silt__mass_fraction": "river_bed_silt_fraction",
-            "river_bottom-and-bank_sand__mass_fraction": "river_bed_sand_fraction",
-            "river_bottom-and-bank_gravel__mass_fraction": "river_bed_gravel_fraction",
-            "river_water_sediment__kodatie_transport_capacity_a-coefficient": "river_kodatie_a",  # noqa: E501
-            "river_water_sediment__kodatie_transport_capacity_b-coefficient": "river_kodatie_b",  # noqa: E501
-            "river_water_sediment__kodatie_transport_capacity_c-coefficient": "river_kodatie_c",  # noqa: E501
-            "river_water_sediment__kodatie_transport_capacity_d-coefficient": "river_kodatie_d",  # noqa: E501
-        },
-    ):
-        """Generate sediments based river bed characteristics maps.
-
-        Kodatie transport capacity coefficients can also be derived from such mapping
-        table based on the mean sediment diameter of the river bed.
-
-        Adds model layers:
-
-        * **river_bed_sediment_d50** map: median sediment diameter of the river bed [mm]
-        * **river_bed_clay_fraction** map: fraction of clay material in the river bed [-]
-        * **river_bed_silt_fraction** map: fraction of silt material in the river bed [-]
-        * **river_bed_sand_fraction** map: fraction of sand material in the river bed [-]
-        * **river_bed_gravel_fraction** map: fraction of gravel material in the river bed [-]
-        * **river_kodatie_a** map: Kodatie transport capacity coefficient a [-]
-        * **river_kodatie_b** map: Kodatie transport capacity coefficient b [-]
-        * **river_kodatie_c** map: Kodatie transport capacity coefficient c [-]
-        * **river_kodatie_d** map: Kodatie transport capacity coefficient d [-]
-
-        Parameters
-        ----------
-        bedsed_mapping_fn : str
-            Path to a mapping csv file from streamorder to river bed particles
-            characteristics. If None reverts to default values.
-
-            * Required variable: ['strord','river_bed_sediment_d50', \
-'river_bed_clay_fraction', 'river_bed_silt_fraction', 'river_bed_sand_fraction', \
-'river_bed_gravel_fraction']
-            * Optional variable: ['river_kodatie_a', 'river_kodatie_b', \
-'river_kodatie_c', 'river_kodatie_d']
-
-        strord_name : str, optional
-            Name of the stream order map in the grid, by default 'meta_streamorder'.
-        output_names : dict, optional
-            Dictionary with output names that will be used in the model netcdf input
-            files. Users should provide the Wflow.jl variable name followed by the name
-            in the netcdf file.
-        """  # noqa: E501
-        logger.info("Preparing riverbedsed parameter maps.")
-        # check for streamorder
-        if self._MAPS["strord"] not in self.grid:
-            if strord_name not in self.grid:
-                raise ValueError(
-                    f"Streamorder map {strord_name} not found in grid. "
-                    "Please run setup_basemaps or update the strord_name argument."
-                )
-            else:
-                self._MAPS["strord"] = strord_name
-        # update self._MAPS and self._WFLOW_NAMES with user defined output names
-        self._update_naming(output_names)
-
-        # Make river_bed_sediment_d50 map from csv file with mapping between streamorder
-        #  and river_bed_sediment_d50 value
-        if bedsed_mapping_fn is None:
-            fn_map = "riverbedsed_mapping_default"
-        else:
-            fn_map = bedsed_mapping_fn
-
-        df = self.data_catalog.get_dataframe(fn_map)
-
-        strord = self.grid[self._MAPS["strord"]].copy()
-        # max streamorder value above which values get the same D50 value
-        max_str = df.index[-2]
-        nodata = df.index[-1]
-        # if streamroder value larger than max_str, assign last value
-        strord = strord.where(strord <= max_str, max_str)
-        # handle missing value (last row of csv is mapping of nan values)
-        strord = strord.where(strord != strord.raster.nodata, nodata)
-        strord.raster.set_nodata(nodata)
-
-        ds_riversed = workflows.landuse(
-            da=strord,
-            ds_like=self.grid,
-            df=df,
-            logger=logger,
-        )
-
-        rmdict = {k: self._MAPS.get(k, k) for k in ds_riversed.data_vars}
-        self.set_grid(ds_riversed.rename(rmdict))
-        # update config
-        self._update_config_variable_name(ds_riversed.rename(rmdict).data_vars)
-
-    @hydromt_step
-=======
->>>>>>> v1.0.0rc2
     def setup_canopymaps(
         self,
         canopy_fn: str | Path | xr.DataArray,
@@ -1130,20 +773,6 @@ cell [-]
 
         Adds model layers:
 
-<<<<<<< HEAD
-        * **soil_clay_fraction**: clay content of the topsoil [g/g]
-        * **soil_silt_fraction**: silt content of the topsoil [g/g]
-        * **soil_sand_fraction**: sand content of the topsoil [g/g]
-        * **soil_sagg_fraction**: small aggregate content of the topsoil [g/g]
-        * **soil_lagg_fraction**: large aggregate content of the topsoil [g/g]
-        * **erosion_soil_detachability** map: mean detachability of the soil \
-(Morgan et al., 1998) [g/J]
-        * **erosion_usle_k** map: soil erodibility factor from the USLE equation [-]
-        * **soil_sediment_d50** map: median sediment diameter of the soil [mm]
-        * **land_govers_c** map: Govers factor for overland flow transport capacity [-]
-        * **land_govers_n** map: Govers exponent for overland flow transport \
-capacity [-]
-=======
             * **soil_clay_fraction**: clay content of the topsoil [g/g]
             * **soil_silt_fraction**: silt content of the topsoil [g/g]
             * **soil_sand_fraction**: sand content of the topsoil [g/g]
@@ -1162,20 +791,13 @@ capacity [-]
         Required setup methods:
 
         * :py:meth:`~WflowSedimentModel.setup_basemaps`
->>>>>>> v1.0.0rc2
 
 
         Parameters
         ----------
         soil_fn : {"soilgrids"}
             Name of soil data source in data_sources.yml file.
-<<<<<<< HEAD
-
-            * Required variables: ['clyppt_sl1', 'sltppt_sl1', 'oc_sl1']
-
-=======
                 * Required variables: ['clyppt_sl1', 'sltppt_sl1', 'oc_sl1']
->>>>>>> v1.0.0rc2
         usle_k_method: {"renard", "epic"}
             Method to compute the USLE K factor, by default renard.
         add_aggregates: bool, optional
@@ -1201,18 +823,12 @@ capacity [-]
             self.staticmaps.data,
             usle_k_method=usle_k_method,
             add_aggregates=add_aggregates,
-<<<<<<< HEAD
-            logger=logger,
-=======
->>>>>>> v1.0.0rc2
         )
         rmdict = {k: self._MAPS.get(k, k) for k in dsout.data_vars}
         self.set_grid(dsout.rename(rmdict))
         self._update_config_variable_name(dsout.rename(rmdict).data_vars)
 
     @hydromt_step
-<<<<<<< HEAD
-=======
     def setup_outlets(
         self,
         river_only: bool = True,
@@ -1383,7 +999,6 @@ capacity [-]
         )
 
     @hydromt_step
->>>>>>> v1.0.0rc2
     def upgrade_to_v1_wflow(
         self,
         soil_fn: str = "soilgrids",
@@ -1416,18 +1031,8 @@ capacity [-]
         strord_name : str, optional
             strord_name argument of setup_riverbedsed method.
         """
-<<<<<<< HEAD
-        self.read()
-        config_out = convert_to_wflow_v1_sediment(self.config, logger=logger)
-        # tomlkit loads errors on this file so we have to do it in two steps
-        with open(DATADIR / "default_config_headers.toml", "r") as file:
-            default_header_str = file.read()
-
-        self._config = tomlkit.parse(default_header_str)
-=======
         config_v0 = self.config.data.copy()
         config_out = convert_to_wflow_v1_sediment(self.config.data)
->>>>>>> v1.0.0rc2
 
         # Update the config
         with open(utils.DATADIR / "default_config_headers.toml", "rb") as file:
