@@ -3857,9 +3857,9 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         logger.info("Preparing land surface temperature forcing maps.")
 
         # Get time configuration
-        starttime = self.get_config("time.starttime")
-        endtime = self.get_config("time.endtime")
-        freq = pd.to_timedelta(self.get_config("time.timestepsecs"), unit="s")
+        starttime = self.config.get_value("time.starttime")
+        endtime = self.config.get_value("time.endtime")
+        freq = pd.to_timedelta(self.config.get_value("time.timestepsecs"), unit="s")
         
               # Process wind if provided
         if wind is not None:
@@ -3894,7 +3894,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             else:
                 raise ValueError(f"Invalid type for wind: {type(wind)}")
             
-            self.set_forcing(wind_out, name="wind")
+            self.forcing.set(wind_out, name="wind")
             self._update_config_variable_name("wind", data_type="forcing")
             self.config.set("input.wind_altitude", wind_altitude)
 
@@ -3927,7 +3927,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     freq=freq,
                     reproj_method=reproj_method,
                 )
-                self.set_forcing(albedo_out, name="albedo")
+                self.forcing.set(albedo_out, name="albedo")
                 self._update_config_variable_name("albedo", data_type="forcing")
             else:
                 # Static data -> goes to grid/staticmaps
@@ -3969,7 +3969,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     freq=freq,
                     reproj_method=reproj_method,
                 )
-                self.set_forcing(emissivity_out, name="emissivity")
+                self.forcing.set(emissivity_out, name="emissivity")
                 self._update_config_variable_name("emissivity", data_type="forcing")
             else:
                 # Static data -> goes to grid/staticmaps
@@ -4012,7 +4012,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 freq=freq,
                 reproj_method=reproj_method,
             )
-            self.set_forcing(shortwave_out, name="shortwave_in")
+            self.forcing.set(shortwave_out, name="shortwave_in")
             self._update_config_variable_name("shortwave_in", data_type="forcing")
 
   
@@ -4030,13 +4030,13 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             shortwave = self.forcing["shortwave_in"]
             
             # Get latitude from grid
-            if "lat" in self.grid.coords:
-                latitude = self.grid["lat"]
-            elif "latitude" in self.grid.coords:
-                latitude = self.grid["latitude"]
+            if "lat" in self.staticmaps.coords:
+                latitude = self.staticmaps["lat"]
+            elif "latitude" in self.staticmaps.coords:
+                latitude = self.staticmaps["latitude"]
             else:
                 # Calculate latitude from coordinates
-                latitude = self.grid.raster.ycoords
+                latitude = self.staticmaps.raster.ycoords
             
             # Calculate net longwave radiation
             net_longwave = workflows.landsurfacetemp.compute_net_longwave_radiation(
@@ -4048,7 +4048,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             
             # Add to forcing
             net_longwave.attrs.update({"source": "calculated_from_temperature_shortwave"})
-            self.set_forcing(net_longwave, name="net_longwave_radiation")
+            self.forcing.set(net_longwave, name="net_longwave_radiation")
             self._update_config_variable_name("net_longwave_radiation", data_type="forcing")
             
             # Calculate net radiation if albedo is available
@@ -4063,7 +4063,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 )
                 
                 net_radiation.attrs.update({"source": "calculated_from_albedo_temperature_shortwave"})
-                self.set_forcing(net_radiation, name="net_radiation")
+                self.forcing.set(net_radiation, name="net_radiation")
                 self._update_config_variable_name("net_radiation", data_type="forcing")
                 logger.info("Net radiation calculated and added to forcing.")
             else:

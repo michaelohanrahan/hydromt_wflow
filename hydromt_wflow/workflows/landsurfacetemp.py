@@ -249,7 +249,7 @@ def albedo(
         raise ValueError(f'First albedo dim should be "time", not {albedo.raster.dim0}')
     
     # reproject to model grid
-    albedo_out = albedo.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
+    albedo_out = albedo.raster.reproject_like(mod.staticmaps.data["land_elevation"], method=reproj_method)
     
     # resample time if requested
     albedo_out.name = "albedo"
@@ -296,7 +296,7 @@ def emissivity(
         raise ValueError(f'First emissivity dim should be "time", not {emissivity.raster.dim0}')
     
     # reproject to model grid
-    emissivity_out = emissivity.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
+    emissivity_out = emissivity.raster.reproject_like(mod.staticmaps.data["land_elevation"], method=reproj_method)
     
     # ensure values are between 0 and 1
     emissivity_out = np.clip(emissivity_out, 0, 1)
@@ -348,7 +348,7 @@ def radiation(
         raise ValueError(f'First radiation dim should be "time", not {radiation.raster.dim0}')
     
     # reproject to model grid
-    radiation_out = radiation.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
+    radiation_out = radiation.raster.reproject_like(mod.staticmaps.data["land_elevation"], method=reproj_method)
     
     # ensure non-negative values
     radiation_out = np.fmax(radiation_out, 0)
@@ -414,8 +414,8 @@ def wind(
             raise ValueError(f'First wind_v dim should be "time", not {wind_v.raster.dim0}')
         
         # reproject to model grid
-        wind_u_out = wind_u.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
-        wind_v_out = wind_v.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
+        wind_u_out = wind_u.raster.reproject_like(mod.staticmaps.data["land_elevation"], method=reproj_method)
+        wind_v_out = wind_v.raster.reproject_like(mod.staticmaps.data["land_elevation"], method=reproj_method)
         
         # calculate wind speed from components
         wind_out = np.sqrt(wind_u_out**2 + wind_v_out**2)
@@ -426,7 +426,7 @@ def wind(
             raise ValueError(f'First wind dim should be "time", not {wind.raster.dim0}')
         
         # reproject to model grid
-        wind_out = wind.raster.reproject_like(mod.grid["wflow_dem"], method=reproj_method)
+        wind_out = wind.raster.reproject_like(mod.staticmaps.data["land_elevation"], method=reproj_method)
         wind_out.name = "wind_speed"
     
     # Apply altitude correction if requested
