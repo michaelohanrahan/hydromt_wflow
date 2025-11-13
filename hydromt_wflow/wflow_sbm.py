@@ -90,7 +90,7 @@ class WflowSbmModel(WflowBaseModel):
         min_rivwth: float = 30,
         smooth_len: float = 5e3,
         elevtn_map: str = "land_elevation",
-        river_routing: str = "kinematic_wave",
+        river_routing: str = "kinematic-wave",
         connectivity: int = 8,
         output_names: dict = {
             "river_location__mask": "river_mask",
@@ -127,15 +127,15 @@ class WflowSbmModel(WflowBaseModel):
         (default = 0.27) and hp (default = 0.30) parameters. For other methods see
         :py:meth:`hydromt.workflows.river_depth`.
 
-        If ``river_routing`` is set to "local_inertial", the bankfull elevation map
+        If ``river_routing`` is set to "local-inertial", the bankfull elevation map
         can be conditioned based on the average cell elevation ("land_elevation")
         or subgrid outlet pixel elevation ("meta_subgrid_elevation").
         The subgrid elevation might provide a better representation
         of the river elevation profile, however in combination with
-        local_inertial land routing (see :py:meth:`setup_floodplains`)
+        local-inertial land routing (see :py:meth:`setup_floodplains`)
         the subgrid elevation will likely overestimate the floodplain storage capacity.
         Note that the same input elevation map should be used for river bankfull
-        elevation and land elevation when using local_inertial land routing.
+        elevation and land elevation when using local-inertial land routing.
 
         Adds model layers:
 
@@ -180,8 +180,8 @@ class WflowSbmModel(WflowBaseModel):
         rivdph_method : {'gvf', 'manning', 'powlaw'}
             see :py:meth:`hydromt.workflows.river_depth` for details, by default
             "powlaw"
-        river_routing : {'kinematic_wave', 'local_inertial'}
-            Routing methodology to be used, by default "kinematic_wave".
+        river_routing : {'kinematic-wave', 'local-inertial'}
+            Routing methodology to be used, by default "kinematic-wave".
         smooth_len : float, optional
             Length [m] over which to smooth the output river width and depth,
             by default 5e3
@@ -217,7 +217,7 @@ class WflowSbmModel(WflowBaseModel):
             output_names=output_names,
         )
 
-        routing_options = ["kinematic_wave", "local_inertial"]
+        routing_options = ["kinematic-wave", "local-inertial"]
         if river_routing not in routing_options:
             raise ValueError(
                 f'river_routing="{river_routing}" unknown. '
@@ -227,7 +227,7 @@ class WflowSbmModel(WflowBaseModel):
         logger.info(f'Update wflow config model.river_routing="{river_routing}"')
         self.config.set("model.river_routing", river_routing)
 
-        if river_routing == "local_inertial":
+        if river_routing == "local-inertial":
             postfix = {
                 "land_elevation": "_avg",
                 "meta_subgrid_elevation": "_subgrid",
@@ -333,7 +333,7 @@ class WflowSbmModel(WflowBaseModel):
         elevtn_map: str = "land_elevation",
         connectivity: int = 4,
         output_names: dict = {
-            "floodplain_water__sum_of_volume_per_depth": "floodplain_volume",
+            "floodplain_water__sum_of_volume-per-depth": "floodplain_volume",
             "river_bank_elevation": "river_bank_elevation_avg_D4",
         },
     ):
@@ -352,7 +352,7 @@ class WflowSbmModel(WflowBaseModel):
 
         If ``floodplain_type`` is set to "2d", this component adds
         a hydrologically conditioned elevation (river_bank_elevation) map for
-        land routing (local_inertial). For this options, landcells need to be
+        land routing (local-inertial). For this options, landcells need to be
         conditioned to D4 flow directions otherwise pits may remain in the land cells.
 
         The conditioned elevation can be based on the average cell elevation
@@ -361,10 +361,10 @@ class WflowSbmModel(WflowBaseModel):
         the floodplain storage capacity.
 
         Additionally, note that the same input elevation map should be used for river
-        bankfull elevation and land elevation when using local_inertial land routing.
+        bankfull elevation and land elevation when using local-inertial land routing.
 
         Requires :py:meth:`setup_rivers` to be executed beforehand
-        (with ``river_routing`` set to "local_inertial").
+        (with ``river_routing`` set to "local-inertial").
 
         Adds model layers:
 
@@ -410,13 +410,13 @@ class WflowSbmModel(WflowBaseModel):
         pyflwdir.FlwdirRaster.dem_adjust
         setup_rivers
         """
-        if self.config.get_value("model.river_routing") != "local_inertial":
+        if self.config.get_value("model.river_routing") != "local-inertial":
             raise ValueError(
                 "Floodplains (1d or 2d) are currently only supported with \
 local inertial river routing"
             )
         # update self._MAPS and self._WFLOW_NAMES with user defined output names
-        var = "floodplain_water__sum_of_volume_per_depth"
+        var = "floodplain_water__sum_of_volume-per-depth"
         if var in output_names:
             self._update_naming({var: output_names[var]})
 
@@ -429,7 +429,7 @@ local inertial river routing"
         # Adjust settings based on floodplain_type selection
         if floodplain_type == "1d":
             floodplain_1d = True
-            land_routing = "kinematic_wave"
+            land_routing = "kinematic-wave"
 
             if not hasattr(pyflwdir.FlwdirRaster, "ucat_volume"):
                 logger.warning("This method requires pyflwdir >= 0.5.6")
@@ -487,7 +487,7 @@ setting new flood_depth dimensions"
 
         elif floodplain_type == "2d":
             floodplain_1d = False
-            land_routing = "local_inertial"
+            land_routing = "local-inertial"
 
             if elevtn_map not in self.staticmaps.data:
                 raise ValueError(f'"{elevtn_map}" not found in grid')
@@ -548,7 +548,7 @@ setting new flood_depth dimensions"
                 "state.variables.land_surface_water__instantaneous_volume_flow_rate",
                 "land_instantaneous_q",
             )
-            # Remove local_inertial land states
+            # Remove local-inertial land states
             self.config.remove(
                 "state.variables.land_surface_water__x_component_of_instantaneous_volume_flow_rate",
                 errors="ignore",
@@ -568,7 +568,7 @@ setting new flood_depth dimensions"
                 errors="ignore",
             )
         else:
-            # Add local_inertial land routing states
+            # Add local-inertial land routing states
             self.config.set(
                 "state.variables.land_surface_water__x_component_of_instantaneous_volume_flow_rate",
                 "land_instantaneous_qx",
@@ -577,7 +577,7 @@ setting new flood_depth dimensions"
                 "state.variables.land_surface_water__y_component_of_instantaneous_volume_flow_rate",
                 "land_instantaneous_qy",
             )
-            # Remove kinematic_wave and 1d floodplain states
+            # Remove kinematic-wave and 1d floodplain states
             self.config.remove(
                 "state.variables.land_surface_water__instantaneous_volume_flow_rate",
                 errors="ignore",
@@ -1187,6 +1187,7 @@ setting new flood_depth dimensions"
     def setup_lulcmaps_with_paddy(
         self,
         lulc_fn: str | Path | xr.DataArray,
+        *,
         paddy_class: int,
         output_paddy_class: int | None = None,
         lulc_mapping_fn: str | Path | pd.DataFrame | None = None,
@@ -1201,24 +1202,24 @@ setting new flood_depth dimensions"
             None,
             None,
         ],
-        lulc_vars: dict = {
-            "landuse": None,
-            "vegetation_kext": "vegetation_canopy__light_extinction_coefficient",
-            "land_manning_n": "land_surface_water_flow__manning_n_parameter",
-            "soil_compacted_fraction": "compacted_soil__area_fraction",
-            "vegetation_root_depth": "vegetation_root__depth",
-            "vegetation_leaf_storage": "vegetation__specific_leaf_storage",
-            "vegetation_wood_storage": "vegetation_wood_water__storage_capacity",
-            "land_water_fraction": "land_water_covered__area_fraction",
-            "vegetation_crop_factor": "vegetation__crop_factor",
-            "vegetation_feddes_alpha_h1": "vegetation_root__feddes_critical_pressure_head_h1_reduction_coefficient",  # noqa: E501
-            "vegetation_feddes_h1": "vegetation_root__feddes_critical_pressure_head_h1",
-            "vegetation_feddes_h2": "vegetation_root__feddes_critical_pressure_head_h2",
-            "vegetation_feddes_h3_high": "vegetation_root__feddes_critical_pressure_head_h3_high",  # noqa: E501
-            "vegetation_feddes_h3_low": "vegetation_root__feddes_critical_pressure_head_h3_low",  # noqa: E501
-            "vegetation_feddes_h4": "vegetation_root__feddes_critical_pressure_head_h4",
-        },
-        paddy_waterlevels: dict = {
+        lulc_vars: list[str] = [
+            "landuse",
+            "vegetation_kext",
+            "land_manning_n",
+            "soil_compacted_fraction",
+            "vegetation_root_depth",
+            "vegetation_leaf_storage",
+            "vegetation_wood_storage",
+            "land_water_fraction",
+            "vegetation_crop_factor",
+            "vegetation_feddes_alpha_h1",
+            "vegetation_feddes_h1",
+            "vegetation_feddes_h2",
+            "vegetation_feddes_h3_high",
+            "vegetation_feddes_h3_low",
+            "vegetation_feddes_h4",
+        ],
+        paddy_waterlevels: dict[str, int] = {
             "demand_paddy_h_min": 20,
             "demand_paddy_h_opt": 50,
             "demand_paddy_h_max": 80,
@@ -1347,10 +1348,15 @@ setting new flood_depth dimensions"
             List of target vertical conductivities [mm/day] for each layer in
             ``wflow_thicknesslayers``. Set value to `None` if no specific value is
             required, by default [None, None, 5, None, None].
-        lulc_vars : dict
-            Dictionnary of landuse parameters to prepare. The names are the
-            the columns of the mapping file and the values are the corresponding
-            Wflow.jl variables.
+        lulc_vars : list[str], optional
+            List of landuse parameters to prepare.
+            The names are the columns of the mapping file.
+            Can be a subset of: ["landuse", "vegetation_kext", "land_manning_n",
+            "soil_compacted_fraction", "vegetation_root_depth",
+            "vegetation_leaf_storage", "vegetation_wood_storage", "land_water_fraction",
+            "vegetation_crop_factor", "vegetation_feddes_alpha_h1",
+            "vegetation_feddes_h1", "vegetation_feddes_h2", "vegetation_feddes_h3_high",
+            "vegetation_feddes_h3_low", "vegetation_feddes_h4"]
         paddy_waterlevels : dict
             Dictionary with the minimum, optimal and maximum water levels for paddy
             fields [mm]. By default {"demand_paddy_h_min": 20, "demand_paddy_h_opt": 50,
@@ -1366,10 +1372,14 @@ setting new flood_depth dimensions"
             soil_ksat_vertical_factor but not the soil_brooks_corey_c parameter.
         """
         logger.info("Preparing LULC parameter maps including paddies.")
+
+        workflows.validate_lulc_vars(lulc_vars)
+
         if output_names_suffix is not None:
             # rename lulc_vars with the suffix
             output_names = {
-                v: f"{k}_{output_names_suffix}" for k, v in lulc_vars.items()
+                workflows.LULC_VARS_MAPPING[k]: f"{k}_{output_names_suffix}"
+                for k in lulc_vars
             }
             # Add soil_ksat_vertical_factor
             output_names[self._WFLOW_NAMES[self._MAPS["soil_ksat_vertical_factor"]]] = (
@@ -1377,18 +1387,9 @@ setting new flood_depth dimensions"
             )
 
         else:
-            output_names = {v: k for k, v in lulc_vars.items()}
+            output_names = {workflows.LULC_VARS_MAPPING[k]: k for k in lulc_vars}
         # update self._MAPS and self._WFLOW_NAMES with user defined output names
         self._update_naming(output_names)
-
-        # As landuse is not a wflow variable, we update the name manually in self._MAPS
-        rmdict = {"landuse": "meta_landuse"} if "landuse" in lulc_vars else {}
-        if output_names_suffix is not None:
-            self._MAPS["landuse"] = f"meta_landuse_{output_names_suffix}"
-            # rename dict for the staticmaps (hydromt names are not used in that case)
-            rmdict = {k: f"{k}_{output_names_suffix}" for k in lulc_vars.keys()}
-            if "landuse" in lulc_vars:
-                rmdict["landuse"] = f"meta_landuse_{output_names_suffix}"
 
         # Check if soil data is available
         if self._MAPS["ksat_vertical"] not in self.staticmaps.data.data_vars:
@@ -1405,7 +1406,7 @@ setting new flood_depth dimensions"
         )
         df_mapping = self.data_catalog.get_dataframe(
             lulc_mapping_fn,
-            driver_kwargs={"index_col": 0},  # only used if fn_map is a file path
+            source_kwargs={"driver": {"name": "pandas", "options": {"index_col": 0}}},
         )
         output_paddy_class = (
             paddy_class if output_paddy_class is None else output_paddy_class
@@ -1421,7 +1422,7 @@ setting new flood_depth dimensions"
                 paddy_mapping_fn = "paddy_mapping_default"
             df_paddy_mapping = self.data_catalog.get_dataframe(
                 paddy_mapping_fn,
-                driver_kwargs={"index_col": 0},
+                source_kwargs={"driver": {"name": "pandas", "options": {"index_col": 0}}},
             )
 
             landuse, df_mapping = workflows.add_paddy_to_landuse(
@@ -1442,14 +1443,10 @@ setting new flood_depth dimensions"
 
         # Prepare landuse parameters
         landuse_maps = workflows.landuse(
-            da=landuse,
-            ds_like=self.staticmaps.data,
-            df=df_mapping,
-            params=list(lulc_vars.keys()),
+            da=landuse, ds_like=self.staticmaps.data, df=df_mapping, params=lulc_vars
         )
-        self.staticmaps.set(landuse_maps.rename(rmdict))
-        # update config
-        self._update_config_variable_name(landuse_maps.rename(rmdict).data_vars)
+
+        self._set_landuse_on_staticmaps(landuse_maps, lulc_vars, output_names_suffix)
 
         # Update soil parameters if there are paddies in the domain
         # Get paddy pixels at model resolution
@@ -1581,7 +1578,7 @@ setting new flood_depth dimensions"
         buffer : int, optional
             Buffer in pixels around the region to read the data, by default 2.
         output_name : str
-            Name of the output vegetation__leaf_area_index map.
+            Name of the output vegetation__leaf-area_index map.
             By default "vegetation_leaf_area_index".
         """
         # retrieve data for region
@@ -1651,7 +1648,7 @@ setting new flood_depth dimensions"
             months (1,2,3,...,12).
             This table can be created using the :py:meth:`setup_laimaps` method.
         output_name : str
-            Name of the output vegetation__leaf_area_index map.
+            Name of the output vegetation__leaf-area_index map.
             By default "vegetation_leaf_area_index".
         """
         logger.info("Preparing LAI maps from LULC data using LULC-LAI mapping table.")
@@ -1922,7 +1919,7 @@ Run setup_soilmaps first"
             "soil_surface_water__vertical_saturated_hydraulic_conductivity": "soil_ksat_vertical",  # noqa: E501
             "soil__thickness": "soil_thickness",
             "soil_water__vertical_saturated_hydraulic_conductivity_scale_parameter": "soil_f",  # noqa: E501
-            "soil_layer_water__brooks_corey_exponent": "soil_brooks_corey_c",
+            "soil_layer_water__brooks-corey_exponent": "soil_brooks_corey_c",
         },
     ):
         """
@@ -2059,7 +2056,7 @@ or created by a third party/ individual.
             to the name of the ksat_fn DataArray.
         """
         logger.info("Preparing KsatHorFrac parameter map.")
-        wflow_var = "subsurface_water__horizontal_to_vertical_saturated_hydraulic_conductivity_ratio"  # noqa: E501
+        wflow_var = "subsurface_water__horizontal-to-vertical_saturated_hydraulic_conductivity_ratio"  # noqa: E501
         dain = self.data_catalog.get_rasterdataset(
             ksat_fn,
             geom=self.region,
@@ -3276,6 +3273,11 @@ using 'variable' argument."
         endtime = self.config.get_value("time.endtime")
         freq = pd.to_timedelta(self.config.get_value("time.timestepsecs"), unit="s")
         mask = self.staticmaps.data[self._MAPS["basins"]].values > 0
+        if mask.sum() == 0:
+            logger.warning(
+                "Basin mask is all False - forcing data will be all NaN/zero. "
+                "Check if basin map is correctly set up."
+            )
 
         precip = self.data_catalog.get_rasterdataset(
             precip_fn,
@@ -3603,6 +3605,11 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         timestep = self.config.get_value("time.timestepsecs")
         freq = pd.to_timedelta(timestep, unit="s")
         mask = self.staticmaps.data[self._MAPS["basins"]].values > 0
+        if mask.sum() == 0:
+            logger.warning(
+                "Basin mask is all False - forcing data will be all NaN/zero. "
+                "Check if basin map is correctly set up."
+            )
 
         variables = ["temp"]
         if not skip_pet:
@@ -3861,10 +3868,10 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         endtime = self.config.get_value("time.endtime")
         freq = pd.to_timedelta(self.config.get_value("time.timestepsecs"), unit="s")
         
-              # Process wind if provided
+        # Process wind if provided
         if wind is not None:
-            logger.info("Processing wind data.")
-            if isinstance(wind, str):
+            if isinstance(wind, str) and wind in self.data_catalog.sources.keys():
+                logger.info("Retrieving wind data from data catalog under:", wind)
                 wind_u = self.data_catalog.get_rasterdataset(
                     wind,
                     geom=self.region,
@@ -3872,6 +3879,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     time_tuple=(starttime, endtime),
                     variables=["wind10_u"]
                     ).sel(time=slice(starttime, endtime))
+
                 wind_v = self.data_catalog.get_rasterdataset(
                     wind,
                     geom=self.region,
@@ -3882,6 +3890,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                 
                 wind_u = wind_u.astype("float32")
                 wind_v = wind_v.astype("float32")
+
                 wind_out = workflows.landsurfacetemp.wind(
                     mod=self,
                     wind_u=wind_u,
@@ -3892,7 +3901,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                     reproj_method=reproj_method,
                 )
             else:
-                raise ValueError(f"Invalid type for wind: {type(wind)}")
+                raise ValueError(f"Invalid type for wind: {type(wind)} or wind source not in data catalog sources: {self.data_catalog.sources.keys()}")
             
             self.forcing.set(wind_out, name="wind")
             self._update_config_variable_name("wind", data_type="forcing")
@@ -3906,7 +3915,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                                                                  buffer=2, 
                                                                  time_tuple=(starttime, 
                                                                              endtime),
-                                                                 variables="albedo")
+                                                                 variables=["albedo"])
                     logger.info(f"Retrieved albedo data from data catalog under:{albedo}")
                 except Exception as e:
                     logger.error(f"Error retrieving albedo key {albedo} from data catalog: {e}")
@@ -3948,7 +3957,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
                                                                      geom=self.region, 
                                                                      buffer=2, 
                                                                      time_tuple=(starttime, endtime),
-                                                                     variables="emissivity")
+                                                                     variables=["emissivity"])
                     logger.info(f"Retrieved emissivity data from data catalog under:{emissivity}")
                 except Exception as e:
                     logger.error(f"Error retrieving emissivity data from {emissivity}: {e}")
@@ -4020,23 +4029,23 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         # Calculate net radiation if we have the required variables
         logger.info("Calculating net radiation components.")
         required_rad_vars = ["temp", "shortwave_in"]
-        missing_rad_vars = [var for var in required_rad_vars if var not in self.forcing]
+        missing_rad_vars = [var for var in required_rad_vars if var not in self.forcing.data]
         
         if missing_rad_vars:
             logger.warning(f"Missing required variables for net radiation calculation: {missing_rad_vars}")
         else:
             # Get required variables
-            temp = self.forcing["temp"]
-            shortwave = self.forcing["shortwave_in"]
+            temp = self.forcing.data["temp"]
+            shortwave = self.forcing.data["shortwave_in"]
             
             # Get latitude from grid
-            if "lat" in self.staticmaps.coords:
-                latitude = self.staticmaps["lat"]
-            elif "latitude" in self.staticmaps.coords:
-                latitude = self.staticmaps["latitude"]
+            if "lat" in self.staticmaps.data.coords:
+                latitude = self.staticmaps.data["lat"]
+            elif "latitude" in self.staticmaps.data.coords:
+                latitude = self.staticmaps.data["latitude"]
             else:
                 # Calculate latitude from coordinates
-                latitude = self.staticmaps.raster.ycoords
+                latitude = self.staticmaps.data.raster.y_coords
             
             # Calculate net longwave radiation
             net_longwave = workflows.landsurfacetemp.compute_net_longwave_radiation(
@@ -4052,8 +4061,8 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
             self._update_config_variable_name("net_longwave_radiation", data_type="forcing")
             
             # Calculate net radiation if albedo is available
-            if "albedo" in self.forcing:
-                albedo = self.forcing["albedo"]
+            if "albedo" in self.forcing.data:
+                albedo = self.forcing.data["albedo"]
                 net_radiation = workflows.landsurfacetemp.compute_net_radiation(
                     albedo=albedo,
                     shortwave_radiation_in=shortwave,
@@ -4101,7 +4110,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         * **land_h**: land water level [m]
         * **land_instantaneous_q** or **land_instantaneous_qx** +
           **land_instantaneous_qy**: overland flow for kinwave [m3/s] or
-          overland flow in x/y directions for local_inertial [m3/s]
+          overland flow in x/y directions for local-inertial [m3/s]
 
         If reservoirs, also adds:
 

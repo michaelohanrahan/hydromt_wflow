@@ -58,7 +58,7 @@ atmosphere_air__temperature = "temp"
 land_surface_water__potential_evaporation_volume_flux = "pet"
 
 [input.cyclic]
-vegetation__leaf_area_index = "LAI"
+vegetation__leaf-area_index = "LAI"
 
 [input.static]
 snowpack__degree_day_coefficient = "Cfmax"
@@ -72,9 +72,9 @@ glacier_ice__melting_temperature_threshold = "G_TTM"
 glacier_ice__degree_day_coefficient = "G_Cfmax"
 glacier_firn_accumulation__snowpack_dry_snow_leq_depth_fraction = "G_SIfrac"
 vegetation_canopy_water__mean_evaporation_to_mean_precipitation_ratio = "EoverR"
-vegetation_canopy__light_extinction_coefficient = "Kext"
+vegetation_canopy__light-extinction_coefficient = "Kext"
 vegetation_root__depth = "RootingDepth"
-vegetation__specific_leaf_storage = "Sl"
+vegetation__specific-leaf_storage = "Sl"
 vegetation_wood_water__storage_capacity = "Swood"
 vegetation_root__feddes_critical_pressure_head_h1_reduction_coefficient = "alpha_h1"
 soil_surface_water__infiltration_reduction_parameter = "cf_soil"

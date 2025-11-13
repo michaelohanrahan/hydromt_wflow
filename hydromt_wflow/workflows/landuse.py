@@ -23,6 +23,8 @@ __all__ = [
     "lai_from_lulc_mapping",
     "add_paddy_to_landuse",
     "add_planted_forest_to_landuse",
+    "LULC_VARS_MAPPING",
+    "validate_lulc_vars",
 ]
 
 
@@ -32,6 +34,43 @@ RESAMPLING = {
     "vegetation_feddes_alpha_h1": "mode",
 }
 DTYPES = {"landuse": np.int16, "vegetation_feddes_alpha_h1": np.int16}
+
+# Mapping from parameter names to Wflow variable names
+LULC_VARS_MAPPING = {
+    "landuse": None,
+    "vegetation_kext": "vegetation_canopy__light-extinction_coefficient",
+    "land_manning_n": "land_surface_water_flow__manning_n_parameter",
+    "soil_compacted_fraction": "soil_compacted__area_fraction",
+    "vegetation_root_depth": "vegetation_root__depth",
+    "vegetation_leaf_storage": "vegetation__specific-leaf_storage",
+    "vegetation_wood_storage": "vegetation_wood_water__storage_capacity",
+    "land_water_fraction": "land_water_covered__area_fraction",
+    "vegetation_crop_factor": "vegetation__crop_factor",
+    "vegetation_feddes_alpha_h1": "vegetation_root__feddes_critical_pressure_head_h1_reduction_coefficient",
+    "vegetation_feddes_h1": "vegetation_root__feddes_critical_pressure_head_h1",
+    "vegetation_feddes_h2": "vegetation_root__feddes_critical_pressure_head_h2",
+    "vegetation_feddes_h3_high": "vegetation_root__feddes_critical_pressure_head_h3_high",
+    "vegetation_feddes_h3_low": "vegetation_root__feddes_critical_pressure_head_h3_low",
+    "vegetation_feddes_h4": "vegetation_root__feddes_critical_pressure_head_h4",
+}
+
+
+def validate_lulc_vars(lulc_vars: list[str]) -> None:
+    """Validate that all lulc_vars are valid parameter names.
+    
+    Parameters
+    ----------
+    lulc_vars : list[str]
+        List of landuse parameter names to validate.
+        
+    Raises
+    ------
+    ValueError
+        If any parameter name is not in LULC_VARS_MAPPING.
+    """
+    invalid = [var for var in lulc_vars if var not in LULC_VARS_MAPPING]
+    if invalid:
+        raise ValueError(f"Invalid lulc_vars: {invalid}. Valid options are: {list(LULC_VARS_MAPPING.keys())}")
 
 
 def landuse(

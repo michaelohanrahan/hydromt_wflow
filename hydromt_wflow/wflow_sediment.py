@@ -456,7 +456,7 @@ class WflowSedimentModel(WflowBaseModel):
         planted_forest_fn: str | Path | gpd.GeoDataFrame | None = None,
         lulc_vars: dict = {
             "landuse": None,
-            "soil_compacted_fraction": "compacted_soil__area_fraction",
+            "soil_compacted_fraction": "soil_compacted__area_fraction",
             "erosion_usle_c": "soil_erosion__usle_c_factor",
             "land_water_fraction": "land_water_covered__area_fraction",
         },
@@ -575,7 +575,7 @@ class WflowSedimentModel(WflowBaseModel):
         planted_forest_fn: str | Path | gpd.GeoDataFrame | None = None,
         lulc_vars: dict = {
             "landuse": None,
-            "soil_compacted_fraction": "compacted_soil__area_fraction",
+            "soil_compacted_fraction": "soil_compacted__area_fraction",
             "erosion_usle_c": "soil_erosion__usle_c_factor",
             "land_water_fraction": "land_water_covered__area_fraction",
         },

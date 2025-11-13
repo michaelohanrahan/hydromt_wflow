@@ -198,6 +198,20 @@ class WflowForcingComponent(GridComponent):
 
         # Clean-up forcing and write
         ds = self.data.drop_vars(["mask", "idx_out"], errors="ignore")
+        
+        # Slice to the validated time range
+        if start_time is not None and end_time is not None:
+            ds = ds.sel(time=slice(start_time, end_time))
+
+        # Quick check for all-zero forcing data
+        for var_name in ds.data_vars:
+            if not var_name.endswith("_ex") and ds[var_name].size > 0:
+                var_max = float(ds[var_name].max().values)
+                if abs(var_max) < 1e-6:
+                    logger.warning(
+                        f"Forcing variable '{var_name}' appears to be all zeros (max={var_max:.6f}). "
+                        f"Please check your forcing data source and time range."
+                    )
 
         if decimals is not None:
             ds = ds.round(decimals)
@@ -222,6 +236,11 @@ class WflowForcingComponent(GridComponent):
         )
         encoding["time"] = {"units": time_units}
 
+        # Compute dask arrays before writing to ensure data is materialized
+        # This prevents writing empty/zero files when data is lazy
+        if any(hasattr(ds[var], "chunks") and ds[var].chunks for var in ds.data_vars):
+            ds = ds.compute()
+
         # Write the file either in one go
         if output_frequency is None:
             logger.info(f"Writing file {filepath.as_posix()}")
@@ -232,7 +251,7 @@ class WflowForcingComponent(GridComponent):
                 gdal_compliant=True,
                 rename_dims=True,
                 force_sn=False,
-                compute=False,
+                compute=True,
                 force_overwrite=True,
                 encoding=encoding,
                 **kwargs,
@@ -242,6 +261,9 @@ class WflowForcingComponent(GridComponent):
             logger.info(f"Writing several forcing with freq {output_frequency}")
             # Updating path forcing in config
             for _, data_freq in ds.resample(time=output_frequency):
+                # Compute dask arrays for this frequency chunk
+                if any(hasattr(data_freq[var], "chunks") and data_freq[var].chunks for var in data_freq.data_vars):
+                    data_freq = data_freq.compute()
                 # Sort out the outgoing filename
                 start = data_freq["time"].dt.strftime("%Y%m%d")[0].item()
                 filepath_freq = Path(filepath.parent, f"{filepath.stem}_{start}.nc")
@@ -254,7 +276,7 @@ class WflowForcingComponent(GridComponent):
                     gdal_compliant=True,
                     rename_dims=True,
                     force_sn=False,
-                    compute=False,
+                    compute=True,
                     force_overwrite=True,
                     encoding=encoding,
                     **kwargs,
