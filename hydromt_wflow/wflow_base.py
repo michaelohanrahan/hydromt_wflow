@@ -1,11 +1,12 @@
 """Implement Wflow base model class."""
 
 # Implement model class following model API
+import glob
 import logging
 import os
-from os.path import isfile, join
+from os.path import abspath, dirname, isdir, isfile, join
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import geopandas as gpd
 import numpy as np
@@ -16,7 +17,7 @@ import xarray as xr
 from hydromt import hydromt_step
 from hydromt.error import NoDataStrategy
 from hydromt.gis import flw
-from hydromt.model import Model
+from hydromt.model import Model, ModelRoot
 
 import hydromt_wflow.utils as utils
 from hydromt_wflow import workflows
@@ -744,11 +745,11 @@ and will soon be removed. '
         lulc_mapping_fn: str | Path | pd.DataFrame | None = None,
         lulc_vars: dict = {
             "landuse": None,
-            "vegetation_kext": "vegetation_canopy__light_extinction_coefficient",
+            "vegetation_kext": "vegetation_canopy__light-extinction_coefficient",
             "land_manning_n": "land_surface_water_flow__manning_n_parameter",
-            "soil_compacted_fraction": "compacted_soil__area_fraction",
+            "soil_compacted_fraction": "soil_compacted__area_fraction",
             "vegetation_root_depth": "vegetation_root__depth",
-            "vegetation_leaf_storage": "vegetation__specific_leaf_storage",
+            "vegetation_leaf_storage": "vegetation__specific-leaf_storage",
             "vegetation_wood_storage": "vegetation_wood_water__storage_capacity",
             "land_water_fraction": "land_water_covered__area_fraction",
             "vegetation_crop_factor": "vegetation__crop_factor",
@@ -880,11 +881,11 @@ and will soon be removed. '
         lulc_mapping_fn: str | Path | pd.DataFrame | None = None,
         lulc_vars: dict = {
             "landuse": None,
-            "vegetation_kext": "vegetation_canopy__light_extinction_coefficient",
+            "vegetation_kext": "vegetation_canopy__light-extinction_coefficient",
             "land_manning_n": "land_surface_water_flow__manning_n_parameter",
-            "soil_compacted_fraction": "compacted_soil__area_fraction",
+            "soil_compacted_fraction": "soil_compacted__area_fraction",
             "vegetation_root_depth": "vegetation_root__depth",
-            "vegetation_leaf_storage": "vegetation__specific_leaf_storage",
+            "vegetation_leaf_storage": "vegetation__specific-leaf_storage",
             "vegetation_wood_storage": "vegetation_wood_water__storage_capacity",
             "land_water_fraction": "land_water_covered__area_fraction",
             "vegetation_crop_factor": "vegetation__crop_factor",
@@ -1856,6 +1857,33 @@ one variable and variables list is not provided."
             else:
                 logger.warning(f"Wflow variable {wflow_var} not found, check spelling.")
 
+    def _set_landuse_on_staticmaps(
+        self, landuse_maps: xr.Dataset, lulc_vars: list[str], output_names_suffix: str | None = None
+    ) -> None:
+        """Set landuse maps on staticmaps with proper renaming.
+        
+        Parameters
+        ----------
+        landuse_maps : xr.Dataset
+            Dataset containing landuse parameter maps.
+        lulc_vars : list[str]
+            List of landuse parameter names.
+        output_names_suffix : str, optional
+            Suffix to add to output names.
+        """
+        # As landuse is not a wflow variable, we update the name manually
+        rmdict = {"landuse": "meta_landuse"} if "landuse" in lulc_vars else {}
+        if output_names_suffix is not None:
+            self._MAPS["landuse"] = f"meta_landuse_{output_names_suffix}"
+            # rename dict for the staticmaps (hydromt names are not used in that case)
+            rmdict = {k: f"{k}_{output_names_suffix}" for k in lulc_vars}
+            if "landuse" in lulc_vars:
+                rmdict["landuse"] = f"meta_landuse_{output_names_suffix}"
+        
+        self.staticmaps.set(landuse_maps.rename(rmdict))
+        # update config
+        self._update_config_variable_name(landuse_maps.rename(rmdict).data_vars)
+
     def _update_config_variable_name(
         self, data_vars: str | list[str], data_type: str | None = "static"
     ):
@@ -1948,3 +1976,74 @@ one variable and variables list is not provided."
             check_ftype=True,
             mask=(self.staticmaps.data[self._MAPS["basins"]] > 0),
         )
+
+    def set_root(self, root: Optional[str], mode: Optional[str] = "w") -> None:
+        """Initialize the model root.
+
+        In read/append mode a check is done if the root exists.
+        In write mode the required model folder structure is created.
+
+        Parameters
+        ----------
+        root : str, optional
+            path to model root
+        mode : {"r", "r+", "w", "w+"}, optional
+            read/append/write mode for model files
+        """
+        ignore_ext = set([".log", ".yml"])
+
+        if mode not in ["r", "r+", "w", "w+"]:
+            raise ValueError(
+                f'mode "{mode}" unknown, select from "r", "r+", "w" or "w+"'
+            )
+
+        new_root = root if root is None else abspath(root)
+        _read = mode.startswith("r")
+        _write = mode != "r"
+        _overwrite = mode == "w+"
+
+        if new_root is not None:
+            if _write:
+                # Get folder names from components (typical wflow folders)
+                folders = ["staticgeoms", "staticmaps", "instate", "outstate"]
+                # Also check if components define folders
+                for comp in self.components.values():
+                    if hasattr(comp, "_FOLDERS"):
+                        folders.extend(comp._FOLDERS)
+                    elif hasattr(comp, "folder"):
+                        folders.append(comp.folder)
+
+                folders = list(set(folders))  # Remove duplicates
+
+                for name in folders:
+                    path = join(new_root, name)
+                    if not isdir(path):
+                        os.makedirs(path, exist_ok=True)
+                        continue
+
+                    # path already exists check files
+                    fns = glob.glob(join(path, "*.*"))
+                    exts = set([os.path.splitext(fn)[1] for fn in fns])
+                    exts -= ignore_ext
+
+                    if len(exts) != 0:
+                        if mode.endswith("+"):
+                            logger.warning(
+                                "Model dir already exists and "
+                                f"files might be overwritten: {path}."
+                            )
+                        else:
+                            msg = (
+                                "Model dir already exists and cannot be "
+                                + f"overwritten: {path}. Use 'mode=w+' to force "
+                                + "overwrite existing files."
+                            )
+                            logger.error(msg)
+                            raise IOError(msg)
+
+            # check directory
+            elif not isdir(new_root):
+                raise IOError(f'model root not found at "{new_root}"')
+
+        # Update the root by creating a new ModelRoot instance
+        self.root = ModelRoot(new_root, mode=mode)

@@ -146,11 +146,11 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     },
     "vegetation_kext": {
         "wflow_v0": "vertical.kext",
-        "wflow_v1": "vegetation_canopy__light_extinction_coefficient",
+        "wflow_v1": "vegetation_canopy__light-extinction_coefficient",
     },
     "vegetation_leaf_area_index": {
         "wflow_v0": "vertical.leaf_area_index",
-        "wflow_v1": "vegetation__leaf_area_index",
+        "wflow_v1": "vegetation__leaf-area_index",
         "hydromt_name": "LAI",
     },
     "vegetation_root_depth": {
@@ -159,7 +159,7 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     },
     "vegetation_leaf_storage": {
         "wflow_v0": "vertical.specific_leaf",
-        "wflow_v1": "vegetation__specific_leaf_storage",
+        "wflow_v1": "vegetation__specific-leaf_storage",
         "hydromt_name": "leaf_storage",
     },
     "vegetation_wood_storage": {
@@ -198,7 +198,7 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     # soil
     "soil_brooks_corey_c": {
         "wflow_v0": "vertical.c",
-        "wflow_v1": "soil_layer_water__brooks_corey_exponent",
+        "wflow_v1": "soil_layer_water__brooks-corey_exponent",
         "hydromt_name": "soil_brooks_corey_c",
     },
     "soil_cf": {
@@ -216,7 +216,7 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     },
     "subsurface_ksat_horizontal_ratio": {
         "wflow_v0": "lateral.subsurface.ksathorfrac",
-        "wflow_v1": "subsurface_water__horizontal_to_vertical_saturated_hydraulic_conductivity_ratio",  # noqa: E501
+        "wflow_v1": "subsurface_water__horizontal-to-vertical_saturated_hydraulic_conductivity_ratio",  # noqa: E501
     },
     "soil_f": {
         "wflow_v0": "vertical.f",
@@ -247,7 +247,7 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     },
     "soil_compacted_fraction": {
         "wflow_v0": "vertical.pathfrac",
-        "wflow_v1": "compacted_soil__area_fraction",
+        "wflow_v1": "soil_compacted__area_fraction",
     },
     "soil_rootdistpar": {
         "wflow_v0": "vertical.rootdistpar",
@@ -347,7 +347,7 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     # river
     "floodplain_volume": {
         "wflow_v0": "lateral.river.floodplain.volume",
-        "wflow_v1": "floodplain_water__sum_of_volume_per_depth",
+        "wflow_v1": "floodplain_water__sum_of_volume-per-depth",
         "hydromt_name": "floodplain_volume",
     },
     "floodplain_manning_n": {
@@ -750,7 +750,7 @@ WFLOW_SEDIMENT_NAMES: dict[str, dict[str, str | None]] = {
     },
     "soil_compacted_fraction": {
         "wflow_v0": "vertical.pathfrac",
-        "wflow_v1": "compacted_soil__area_fraction",
+        "wflow_v1": "soil_compacted__area_fraction",
     },
     "land_water_fraction": {
         "wflow_v0": None,
