@@ -104,16 +104,18 @@ def prepare_cold_states(
 
     # Base output config dict for states
     states_config = {
-        "state.variables.soil_water_saturated_zone__depth": "soil_saturated_depth",
+        "state.variables.soil_water_sat-zone__depth": "soil_saturated_depth",  # FIX: hyphen
         "state.variables.snowpack_dry_snow__leq_depth": "snow_leq_depth",
         "state.variables.soil_surface__temperature": "soil_temp",
-        "state.variables.soil_layer_water_unsaturated_zone__depth": "soil_unsaturated_depth",  # noqa: E501
+        "state.variables.soil_layer_water_unsat-zone__depth": "soil_unsaturated_depth",  # FIX: hyphen
         "state.variables.snowpack_liquid_water__depth": "snow_water_depth",
         "state.variables.vegetation_canopy_water__depth": "vegetation_water_depth",
         "state.variables.subsurface_water__volume_flow_rate": "subsurface_q",
         "state.variables.land_surface_water__depth": "land_h",
-        "state.variables.river_water__instantaneous_volume_flow_rate": "river_instantaneous_q",  # noqa: E501
+        "state.variables.land_surface_water__instantaneous_depth": "land_instantaneous_h",  # ADD
+        "state.variables.river_water__instantaneous_volume_flow_rate": "river_instantaneous_q",
         "state.variables.river_water__depth": "river_h",
+        "state.variables.river_water__instantaneous_depth": "river_instantaneous_h",  # ADD
     }
 
     # Map with constant values or zeros for basin
@@ -123,6 +125,7 @@ def prepare_cold_states(
         "snow_water_depth",
         "vegetation_water_depth",
         "land_h",
+        "land_instantaneous_h",  # ADD
     ]
     land_routing = config["model"].get("land_routing", "kinematic-wave")
     if land_routing == "local-inertial":
@@ -221,14 +224,15 @@ def prepare_cold_states(
     ds_out["subsurface_q"] = ssf
 
     # River
-    zeromap_riv = ["river_instantaneous_q", "river_h"]
+    zeromap_riv = ["river_instantaneous_q", "river_h", "river_instantaneous_h"]  # ADD river_instantaneous_h
     # 1D floodplain
     if config["model"].get("floodplain_1d__flag", False):
-        zeromap_riv.extend(["floodplain_instantaneous_q", "floodplain_h"])
+        zeromap_riv.extend(["floodplain_instantaneous_q", "floodplain_h", "floodplain_instantaneous_h"])  # ADD floodplain_instantaneous_h
         states_config[
             "state.variables.floodplain_water__instantaneous_volume_flow_rate"
         ] = "floodplain_instantaneous_q"
         states_config["state.variables.floodplain_water__depth"] = "floodplain_h"
+        states_config["state.variables.floodplain_water__instantaneous_depth"] = "floodplain_instantaneous_h"  # ADD
     for var in zeromap_riv:
         value = 0.0
         da_param = grid_from_constant(

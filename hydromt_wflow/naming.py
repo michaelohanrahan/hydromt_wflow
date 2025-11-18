@@ -509,6 +509,10 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
         "wflow_v0": None,
         "wflow_v1": "land_surface__albedo",
     },
+    "albedo_lulc": {
+        "wflow_v0": None,
+        "wflow_v1": "land_surface__albedo",
+    },
     "emissivity": {
         "wflow_v0": None,
         "wflow_v1": "land_surface__emissivity",
@@ -516,6 +520,10 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     "shortwave_in": {
         "wflow_v0": None,
         "wflow_v1": "atmosphere_air__shortwave_radiation_in",
+    },
+    "wind": {
+        "wflow_v0": None,
+        "wflow_v1": "land_surface_air_flow__speed",
     },
     "wind_speed": {
         "wflow_v0": None,
@@ -527,7 +535,7 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     },
     "net_radiation": {
         "wflow_v0": None,
-        "wflow_v1": "land_surface__net_radiation",
+        "wflow_v1": "land_surface_radiation~net~total__energy_flux",
     },
 }
 
@@ -732,6 +740,10 @@ WFLOW_SEDIMENT_NAMES: dict[str, dict[str, str | None]] = {
     },
     "vegetation_height": {
         "wflow_v0": "vertical.canopyheight",
+        "wflow_v1": "vegetation_canopy__height",
+    },
+    "canopy_height": {
+        "wflow_v0": None,
         "wflow_v1": "vegetation_canopy__height",
     },
     "vegetation_kext": {

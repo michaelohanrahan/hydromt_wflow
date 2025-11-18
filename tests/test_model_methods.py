@@ -472,7 +472,7 @@ def test_setup_lai(example_wflow_model: WflowSbmModel):
 
     assert "lai_from_vito_mapping" in example_wflow_model.staticmaps.data
     assert (
-        example_wflow_model.config.get_value("input.cyclic.vegetation__leaf_area_index")
+        example_wflow_model.config.get_value("input.cyclic.vegetation__leaf-area_index")
         == "lai_from_vito_mapping"
     )
 
