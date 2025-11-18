@@ -3815,6 +3815,7 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         self,
         albedo: str | xr.DataArray | None = None,
         emissivity: str | xr.DataArray | None = None,
+        canopy_height: str | xr.DataArray | None = None,
         shortwave: str | xr.DataArray | None = None,
         wind: str | xr.DataArray | None = None,
         wind_altitude: float = 10,  # Wind measurement altitude in meters (default: 10m)
@@ -3868,215 +3869,47 @@ either {'temp' [°C], 'temp_min' [°C], 'temp_max' [°C], 'wind' [m/s], 'rh' [%]
         endtime = self.config.get_value("time.endtime")
         freq = pd.to_timedelta(self.config.get_value("time.timestepsecs"), unit="s")
         
-        # Process wind if provided
-        if wind is not None:
-            if isinstance(wind, str) and wind in self.data_catalog.sources.keys():
-                logger.info("Retrieving wind data from data catalog under:", wind)
-                wind_u = self.data_catalog.get_rasterdataset(
-                    wind,
-                    geom=self.region,
-                    buffer=4,
-                    time_tuple=(starttime, endtime),
-                    variables=["wind10_u"]
-                    ).sel(time=slice(starttime, endtime))
+        workflows.landsurfacetemp.setup_albedo(
+            mod=self,
+            albedo=albedo,
+            starttime=starttime,
+            endtime=endtime,
+            freq=freq,
+            reproj_method=reproj_method,
+        )
 
-                wind_v = self.data_catalog.get_rasterdataset(
-                    wind,
-                    geom=self.region,
-                    buffer=4,
-                    time_tuple=(starttime, endtime),
-                    variables=["wind10_v"]
-                    ).sel(time=slice(starttime, endtime))
-                
-                wind_u = wind_u.astype("float32")
-                wind_v = wind_v.astype("float32")
+        workflows.landsurfacetemp.setup_emissivity(
+            mod=self,
+            emissivity=emissivity,
+            starttime=starttime,
+            endtime=endtime,
+            freq=freq,
+            reproj_method=reproj_method,
+        )
 
-                wind_out = workflows.landsurfacetemp.wind(
-                    mod=self,
-                    wind_u=wind_u,
-                    wind_v=wind_v,
-                    altitude=wind_altitude,
-                    altitude_correction=wind_altitude_correction,
-                    freq=freq,
-                    reproj_method=reproj_method,
-                )
-            else:
-                raise ValueError(f"Invalid type for wind: {type(wind)} or wind source not in data catalog sources: {self.data_catalog.sources.keys()}")
-            
-            self.forcing.set(wind_out, name="wind")
-            self._update_config_variable_name("wind", data_type="forcing")
-            self.config.set("input.wind_altitude", wind_altitude)
+        workflows.landsurfacetemp.setup_canopy_height(
+            mod=self,
+            canopy_height=canopy_height,
+            starttime=starttime,
+            endtime=endtime,
+            freq=freq,
+            reproj_method=reproj_method,
+        )
 
-        if albedo is not None:
-            if isinstance(albedo, str):
-                try:
-                    albedo = self.data_catalog.get_rasterdataset(albedo, 
-                                                                 geom=self.region, 
-                                                                 buffer=2, 
-                                                                 time_tuple=(starttime, 
-                                                                             endtime),
-                                                                 variables=["albedo"])
-                    logger.info(f"Retrieved albedo data from data catalog under:{albedo}")
-                except Exception as e:
-                    logger.error(f"Error retrieving albedo key {albedo} from data catalog: {e}")
-                    raise e
-            elif isinstance(albedo, xr.DataArray):
-                albedo = albedo
-            else:
-                raise ValueError(f"Invalid type for albedo: {type(albedo)}")
-            
-            albedo = albedo.astype("float32")
-            
-            if "time" in albedo.coords:
-                # Time-varying data -> goes to forcing
-                logger.info("Processing time-varying albedo data for forcing.")
-                albedo_out = workflows.landsurfacetemp.albedo(
-                    mod=self,
-                    albedo=albedo,
-                    freq=freq,
-                    reproj_method=reproj_method,
-                )
-                self.forcing.set(albedo_out, name="albedo")
-                self._update_config_variable_name("albedo", data_type="forcing")
-            else:
-                # Static data -> goes to grid/staticmaps
-                logger.info("Processing static albedo data for grid.")
-                albedo_out = workflows.landsurfacetemp.albedo(
-                    mod=self,
-                    albedo=albedo,
-                    reproj_method=reproj_method,
-                )
-                self.set_staticmaps(albedo_out, name="albedo")
-                self._update_config_variable_name("albedo", data_type="static")
+        workflows.landsurfacetemp.setup_LST_forcing(
+            mod=self,
+            shortwave=shortwave,
+            wind=wind,
+            starttime=starttime,
+            endtime=endtime,
+            freq=freq,
+            wind_altitude=wind_altitude,
+            wind_altitude_correction=wind_altitude_correction,
+            reproj_method=reproj_method,
+        )
 
-        # Process emissivity if provided
-        if emissivity is not None:
-            if isinstance(emissivity, str):
-                try:
-                    emissivity = self.data_catalog.get_rasterdataset(emissivity, 
-                                                                     geom=self.region, 
-                                                                     buffer=2, 
-                                                                     time_tuple=(starttime, endtime),
-                                                                     variables=["emissivity"])
-                    logger.info(f"Retrieved emissivity data from data catalog under:{emissivity}")
-                except Exception as e:
-                    logger.error(f"Error retrieving emissivity data from {emissivity}: {e}")
-                    raise e
-            elif isinstance(emissivity, xr.DataArray):
-                emissivity = emissivity
-            else:
-                raise ValueError(f"Invalid type for emissivity: {type(emissivity)}")
-            
-            emissivity = emissivity.astype("float32")
-            
-            if "time" in emissivity.coords:
-                # Time-varying data -> goes to forcing
-                logger.info("Processing time-varying emissivity data for forcing.")
-                emissivity_out = workflows.landsurfacetemp.emissivity(
-                    mod=self,
-                    emissivity=emissivity,
-                    freq=freq,
-                    reproj_method=reproj_method,
-                )
-                self.forcing.set(emissivity_out, name="emissivity")
-                self._update_config_variable_name("emissivity", data_type="forcing")
-            else:
-                # Static data -> goes to grid/staticmaps
-                logger.info("Processing static emissivity data for grid.")
-                emissivity_out = workflows.landsurfacetemp.emissivity(
-                    mod=self,
-                    emissivity=emissivity,
-                    reproj_method=reproj_method,
-                )
-                self.set_staticmaps(emissivity_out, name="emissivity")
-                self._update_config_variable_name("emissivity", 
-                                                  data_type="static")
-
-        # Process shortwave radiation if provided
-        if shortwave is not None:
-            if isinstance(shortwave, str):
-                try:
-                    shortwave = self.data_catalog.get_rasterdataset(shortwave, 
-                                                                    geom=self.region, 
-                                                                    buffer=2, 
-                                                                    time_tuple=(starttime,
-                                                                                 endtime),
-                                                                    variables="shortwave_down"
-                                                                    )
-                    logger.info(f"Retrieved shortwave radiation data from data catalog under:{shortwave}")
-                except Exception as e:
-                    logger.error(f"Error retrieving shortwave radiation data from {shortwave}: {e}")
-                    raise e
-            elif isinstance(shortwave, xr.DataArray):
-                shortwave = shortwave
-            else:
-                raise ValueError(f"Invalid type for shortwave: {type(shortwave)}")
-            
-            shortwave = shortwave.astype("float32")
-            
-            shortwave_out = workflows.landsurfacetemp.radiation(
-                mod=self,
-                radiation=shortwave,
-                var_name="shortwave_in",
-                freq=freq,
-                reproj_method=reproj_method,
-            )
-            self.forcing.set(shortwave_out, name="shortwave_in")
-            self._update_config_variable_name("shortwave_in", data_type="forcing")
-
-  
-
-        # Calculate net radiation if we have the required variables
-        logger.info("Calculating net radiation components.")
-        required_rad_vars = ["temp", "shortwave_in"]
-        missing_rad_vars = [var for var in required_rad_vars if var not in self.forcing.data]
-        
-        if missing_rad_vars:
-            logger.warning(f"Missing required variables for net radiation calculation: {missing_rad_vars}")
-        else:
-            # Get required variables
-            temp = self.forcing.data["temp"]
-            shortwave = self.forcing.data["shortwave_in"]
-            
-            # Get latitude from grid
-            if "lat" in self.staticmaps.data.coords:
-                latitude = self.staticmaps.data["lat"]
-            elif "latitude" in self.staticmaps.data.coords:
-                latitude = self.staticmaps.data["latitude"]
-            else:
-                # Calculate latitude from coordinates
-                latitude = self.staticmaps.data.raster.y_coords
-            
-            # Calculate net longwave radiation
-            net_longwave = workflows.landsurfacetemp.compute_net_longwave_radiation(
-                air_temperature=temp,
-                shortwave_radiation_in=shortwave,
-                latitude=latitude,
-                time_coord=temp.time
-            )
-            
-            # Add to forcing
-            net_longwave.attrs.update({"source": "calculated_from_temperature_shortwave"})
-            self.forcing.set(net_longwave, name="net_longwave_radiation")
-            self._update_config_variable_name("net_longwave_radiation", data_type="forcing")
-            
-            # Calculate net radiation if albedo is available
-            if "albedo" in self.forcing.data:
-                albedo = self.forcing.data["albedo"]
-                net_radiation = workflows.landsurfacetemp.compute_net_radiation(
-                    albedo=albedo,
-                    shortwave_radiation_in=shortwave,
-                    air_temperature=temp,
-                    latitude=latitude,
-                    time_coord=temp.time
-                )
-                
-                net_radiation.attrs.update({"source": "calculated_from_albedo_temperature_shortwave"})
-                self.forcing.set(net_radiation, name="net_radiation")
-                self._update_config_variable_name("net_radiation", data_type="forcing")
-                logger.info("Net radiation calculated and added to forcing.")
-            else:
-                logger.info("Albedo not available, net radiation not calculated.")
+        # Set land surface temperature flag in model config
+        self.config.set("model.land_surface_temperature__flag", True)
 
         logger.info("Land surface temperature forcing setup completed.")
 

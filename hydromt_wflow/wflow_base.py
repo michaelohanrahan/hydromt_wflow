@@ -1898,10 +1898,19 @@ one variable and variables list is not provided."
         """
         data_vars = [data_vars] if isinstance(data_vars, str) else data_vars
         _prefix = f"input.{data_type}" if data_type is not None else "input"
+        # Create inverse mapping: staticmap_name -> wflow_variable_name
+        _wflow_names_inv = {v: k for k, v in self._WFLOW_NAMES.items()}
         for var in data_vars:
+            # Check if var is a wflow variable name (key in _WFLOW_NAMES)
             if var in self._WFLOW_NAMES:
-                # Get the name from the Wflow variable name
-                wflow_var = self._WFLOW_NAMES[var]
+                # Get the staticmap name from the Wflow variable name
+                staticmap_name = self._WFLOW_NAMES[var]
+                # Update the config variable name
+                self.config.set(f"{_prefix}.{var}", staticmap_name)
+            # Check if var is a staticmap name (value in _WFLOW_NAMES)
+            elif var in _wflow_names_inv:
+                # Get the wflow variable name from the staticmap name
+                wflow_var = _wflow_names_inv[var]
                 # Update the config variable name
                 self.config.set(f"{_prefix}.{wflow_var}", var)
             # else not a wflow variable
