@@ -179,6 +179,7 @@ def compute_net_radiation(
     latitude: xr.DataArray,
     time_coord: xr.DataArray,
     emissivity: Optional[Union[xr.DataArray, float]] = None,
+    net_longwave: Optional[xr.DataArray] = None,
 ) -> xr.DataArray:
     """
     Calculate net radiation.
@@ -200,6 +201,9 @@ def compute_net_radiation(
         Time coordinate for day of year calculation
     emissivity : xr.DataArray or float, optional
         Surface emissivity [-]. Defaults to 0.97 if not provided.
+    net_longwave : xr.DataArray, optional
+        Precomputed net longwave radiation [W m-2]. If provided, this will be used
+        instead of computing it, improving performance.
         
     Returns
     -------
@@ -209,10 +213,11 @@ def compute_net_radiation(
     # Calculate net shortwave radiation: (1-α)Rins
     net_shortwave = (1 - albedo) * shortwave_radiation_in
     
-    # Calculate net longwave radiation
-    net_longwave = compute_net_longwave_radiation(
-        air_temperature, shortwave_radiation_in, latitude, time_coord, emissivity
-    )
+    # Use precomputed net_longwave if provided, otherwise compute it
+    if net_longwave is None:
+        net_longwave = compute_net_longwave_radiation(
+            air_temperature, shortwave_radiation_in, latitude, time_coord, emissivity
+        )
     
     # Calculate net radiation: Rn = RSNet - RLN
     net_radiation = net_shortwave - net_longwave
@@ -777,6 +782,9 @@ def setup_wind(
                 freq=freq,
                 reproj_method=reproj_method,
             )
+            # Ensure standard_name is set
+            if "standard_name" not in wind_out.attrs:
+                wind_out.attrs["standard_name"] = "land_surface_air_flow__speed"
             mod.forcing.set(wind_out, name="wind")
             mod._update_config_variable_name("wind", data_type="forcing")
             logger.info("Wind data added to forcing and config updated")
@@ -918,7 +926,8 @@ def setup_LST_forcing(
             air_temperature=temp,
             latitude=latitude,
             time_coord=temp.time,
-            emissivity=emissivity
+            emissivity=emissivity,
+            net_longwave=net_longwave  # Pass precomputed net_longwave to avoid recomputation
         )
         
         # Ensure time is first dimension (match temp dimension order)
@@ -1073,7 +1082,7 @@ def wind(
     
     wind_out = np.fmax(wind_out, 0)
     
-    wind_out.attrs.update(unit="m s-1")
+    wind_out.attrs.update(unit="m s-1", standard_name="land_surface_air_flow__speed")
     if freq is not None:
         resample_kwargs.update(upsampling="bfill", downsampling="mean")
         wind_out = resample_time(wind_out, freq, conserve_mass=False, **resample_kwargs)

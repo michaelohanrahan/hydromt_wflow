@@ -1901,20 +1901,33 @@ one variable and variables list is not provided."
         # Create inverse mapping: staticmap_name -> wflow_variable_name
         _wflow_names_inv = {v: k for k, v in self._WFLOW_NAMES.items()}
         for var in data_vars:
-            # Check if var is a wflow variable name (key in _WFLOW_NAMES)
+            # Check if var is a staticmap name (key in _WFLOW_NAMES)
             if var in self._WFLOW_NAMES:
-                # Get the staticmap name from the Wflow variable name
-                staticmap_name = self._WFLOW_NAMES[var]
-                # Update the config variable name
-                self.config.set(f"{_prefix}.{var}", staticmap_name)
-            # Check if var is a staticmap name (value in _WFLOW_NAMES)
+                # Get the Wflow parameter name from the staticmap name
+                wflow_param_name = self._WFLOW_NAMES[var]
+                if wflow_param_name is not None:
+                    # Update the config: Wflow parameter name on LEFT, staticmap name on RIGHT
+                    self.config.set(f"{_prefix}.{wflow_param_name}", var)
+                    logger.debug(f"Updated config: {_prefix}.{wflow_param_name} = {var}")
+            # Check if var is a wflow variable name (value in _WFLOW_NAMES)
             elif var in _wflow_names_inv:
-                # Get the wflow variable name from the staticmap name
-                wflow_var = _wflow_names_inv[var]
-                # Update the config variable name
-                self.config.set(f"{_prefix}.{wflow_var}", var)
-            # else not a wflow variable
-            # (spelling mistakes should have been checked in _update_naming)
+                # Get the staticmap name from the wflow variable name
+                staticmap_name = _wflow_names_inv[var]
+                # Update the config: Wflow parameter name on LEFT, staticmap name on RIGHT
+                self.config.set(f"{_prefix}.{var}", staticmap_name)
+                logger.debug(f"Updated config: {_prefix}.{var} = {staticmap_name}")
+            else:
+                manual_mappings = {
+                    "wind": "land_surface_air_flow__speed",
+                    "wind_speed": "land_surface_air_flow__speed",
+                }
+                if var in manual_mappings:
+                    wflow_param_name = manual_mappings[var]
+                    self.config.set(f"{_prefix}.{wflow_param_name}", var)
+                    logger.info(f"Manually mapped {var} to {wflow_param_name} in config")
+                else:
+                    # Variable not found in mapping
+                    logger.warning(f"Variable '{var}' not found in WFLOW_NAMES mapping for {data_type}, skipping config update")
 
     ## WFLOW specific data and method
     # Non model component properties

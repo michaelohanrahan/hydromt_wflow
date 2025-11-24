@@ -531,7 +531,7 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
     },
     "net_longwave_radiation": {
         "wflow_v0": None,
-        "wflow_v1": "land_surface__net_radiation",
+        "wflow_v1": "land_surface__net_longwave_radiation",
     },
     "net_radiation": {
         "wflow_v0": None,
@@ -1067,7 +1067,10 @@ def _create_hydromt_wflow_mapping(
                         new_name = None
                     elif "netcdf_variable_name" in new_name:
                         new_name = new_name["netcdf_variable_name"]
-                if new_name is not None and old_name != new_name:
+                    else:
+                        # Skip if dict doesn't match expected structure
+                        continue
+                if new_name is not None and isinstance(new_name, str) and old_name != new_name:
                     # Update the mapping with the new name
                     mapping_inv[new_name] = mapping_inv.get(old_name, old_name)
                     # Remove the old name from the mapping
