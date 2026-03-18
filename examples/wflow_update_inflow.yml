@@ -1,0 +1,16 @@
+steps:
+  - setup_point_series_river_flux:
+      geodataset_source: piave_inflow_nc   # name in data catalog
+      flux_var: Q
+      wflow_var: river_water__external_inflow_volume_flow_rate
+      out_var: inflow
+      add_q_mask: true
+      max_dist: 5000   # metres; points snapped to nearest river cell within this radius
+
+  - setup_config:
+      data:
+        input.path_forcing: forcing_piave_with_inflow.nc
+
+  - forcing.write: {}
+
+  - config.write: {}

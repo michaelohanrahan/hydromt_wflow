@@ -3509,6 +3509,222 @@ using 'variable' argument."
         self.geoms.set(gdf_stations, name="stations_precipitation")
 
     @hydromt_step
+    def setup_point_series_river_flux(
+        self,                                                                                                                                                                                                           
+        geodataset_source: str | xr.Dataset,
+        flux_var: str = "Q",                   # variable in the geodataset (e.g. "Q")
+        wflow_var: str = "river_water__external_inflow_volume_flow_rate",       
+        out_var: str = "inflow",         # name written into forcing nc                                                                                                                                                 
+        add_q_mask: bool = True,                                                                                                                                                                                        
+        max_dist: float = 10e3, 
+        source_read_kwargs: dict = {},                                                                                                                                                                                        
+        **kwargs,) -> None:
+        """
+        Add a forcing layer that generates an appropriate inflow (/outflow) at a specific
+        river segment within the model. The function takes care of snapping to the river
+        cells. The timestep of the inflow (/outflow) is assumed to be the same as the model.
+
+        Assumptions:
+        - The flux is expected to be applied at streamflow locations, so the applied flux
+            is assumed to be in m^3/s.
+        - 
+
+        Inputs:
+        - geodataset_source: str or xr.Dataset
+            - string: name of the geodataset in the data catalog
+            - xr.Dataset: the dataset itself
+            - expected dims: (time, inflow_id) with point geometrie as lat,lon non-index coordinates
+        - flux_var: str
+            - variable in the geodataset (e.g. "Q"), used to read dataset to dataarray
+        - wflow_var: str
+            - name of the wflow variable to write to (e.g. "river_water__external_inflow_volume_flow_rate")
+        - out_var: str
+            - name of the wflow variable to write to (e.g. "inflow") and to connect to the configuration
+        - max_dist: float
+            - maximum distance in meters from the river segment to the point location to be snapped to the river
+        - source_read_kwargs: dict
+            - additional keyword arguments to pass to the data catalog get_geodataset method
+        - **kwargs: dict
+        """
+
+        assert self.forcing is not None, \
+            "meteo forcing must be derived before creating model inflow forcing"
+
+        # anticipate DC entry or dataset
+        if isinstance(geodataset_source, str):
+            assert geodataset_source in self.data_catalog.get_source_names(), \
+                f"geodataset_source '{geodataset_source}' not found in the data catalog"
+
+            gda = self.data_catalog.get_geodataset(
+                geodataset_source,
+                geom=self.basins, # has to fall within the basin
+                variables=[flux_var],
+                single_var_as_array=True, # i think
+                **source_read_kwargs,
+            )
+        elif isinstance(geodataset_source, xr.Dataset):
+            try:
+                gda = hydromt.data_catalog.DataCatalog().get_geodataset(
+                    geodataset_source, # TODO: TEST THIS
+                    geom=self.basins, # has to fall within the basin
+                    variables=[flux_var],
+                    single_var_as_array=True, # i think
+                    **source_read_kwargs,
+                )
+
+            except FileNotFoundError:
+                raise FileNotFoundError(f"File {geodataset_fn} not found")
+        else:
+            raise ValueError(f"Invalid geodataset_fn: {geodataset_fn}, must be a string or xr.Dataset \
+                got {geodataset_fn} of type {type(geodataset_fn)}")
+        
+        #FIRST deal with location
+        #dimension handling
+        x_dim = "lon" if "lon" in gda.coords else kwargs.get("x_dim", "x")
+        y_dim = "lat" if "lat" in gda.coords else kwargs.get("y_dim", "y")
+        id_dim = "inflow_id" if "inflow_id" in gda.coords else kwargs.get("id_dim", "id")
+        
+        assert x_dim in gda.coords and y_dim in gda.coords, \
+            f"x_dim and y_dim must be in the coordinates of the geodataset, got coords {gda_fn.coords} from the source, \
+                , you can provide 'x_dim' and 'y_dim' as kwargs"
+
+        # get x, y, and id values for each inflow_id
+        xvals = list(gda.coords[x_dim].values)
+        yvals = list(gda.coords[y_dim].values)
+        ids = []
+        for _id in gda[id_dim].values:
+            try:
+                ids.append(int(_id))
+            except ValueError:
+                _id = _id.strip()
+                if _id.isdigit():
+                    ids.append(int(_id))
+                else:
+                    raise ValueError(f"Invalid id in {id_dim} index in setup_point_series_river_flux: {_id}, must be a number")
+        assert len(xvals) == len(yvals) == len(ids), \
+            f"number of x, y, and id values do not match, got {len(xvals)}, {len(yvals)}, {len(ids)}"
+
+        # snap to river 
+        idxs = self.staticmaps.data.raster.xy_to_idx(xvals, yvals)
+        da_snap, idxs, ids = flw.gauge_map(
+            self.staticmaps.data,
+            idxs=idxs,
+            ids=ids,
+            stream=self.staticmaps.data[self._MAPS["rivmsk"]].values,
+            flwdir=flw.flwdir_from_da(self.staticmaps.data[self._MAPS["flwdir"]]),
+            max_dist=max_dist,
+        )
+
+        if len(ids) != len(gda[id_dim].values):
+            logger.warning(f"number of ids {len(ids)} does not match number of ids in the inflow dataset {len(gda[id_dim].values)}\
+                if unexpected, try checking the location of the points in relation to the river network")
+
+        #SECOND deal with time
+        time_dim = kwargs.get("time_dim", "time")
+        assert time_dim in gda.coords, \
+            f"time_dim '{time_dim}' not found in the geodataset, got coords{gda_fn.coords} from the source"
+
+        #assume user has thought to apply time range, empty time steps to be zeros
+        starttime = self.config.get_value("time.starttime")
+        endtime = self.config.get_value("time.endtime")
+        timestep = self.config.get_value("time.timestepsecs")
+
+        gda_freq = pd.Timedelta(gda[time_dim].values[1] - gda[time_dim].values[0])
+        freq = pd.to_timedelta(int(self.config.get_value('time.timestepsecs')), unit='s')
+        if gda_freq != freq:
+            raise ValueError(f"geodataset frequency {gda_freq} does not match model frequency {freq}")
+
+
+        #create the intermediate snapped inflow dataset with appropriate chunking in the root
+        # TODO: THIS SHOULD BE THE FUTURE SCALAR FORCING
+        # TODO: revisit the fill with zeros 
+        # for now it just helps with the writing later on since it is already chunked
+
+        time_index = pd.date_range(start=starttime, end=endtime, freq=freq)
+        _tmp_da = xr.DataArray(
+            data=np.zeros((len(time_index), len(ids))),
+            dims=[
+                "time", 
+                "inflow_id",
+            ],
+            coords={
+                "time": time_index, 
+                "inflow_id": ids,
+                "x": ("inflow_id", xvals),
+                "y": ("inflow_id", yvals),
+                "idx": ("inflow_id", idxs),
+            },
+        )
+        for _id, _idx in zip(ids, idxs):
+            series = gda.sel({id_dim: _id, time_dim: time_index})
+            if freq != gda_freq:
+                logger.warning(f"geodataset frequency {gda_freq} does not match model frequency {freq}, \
+                    resampling the series to the model frequency")
+                series = series.resample(time=freq).mean()
+            _tmp_da.loc[:, _id] = series.values.squeeze()
+        
+        import tempfile
+        from dask.diagnostics import ProgressBar
+
+        _tmp_da = _tmp_da.chunk({"time": 1})
+        tmp_ds = _tmp_da.to_dataset(name=out_var)
+        tmp_file = tempfile.NamedTemporaryFile(suffix=".nc", delete=False)
+        out_fn = tmp_file.name
+        tmp_file.close()  # close handle so netCDF4 can open it
+        logger.info(f"Writing intermediate scalar inflow dataset to {out_fn}")
+        with ProgressBar():
+            tmp_ds.to_netcdf(out_fn, unlimited_dims=[time_dim], compute=True)
+        tmp_ds.close()
+
+        # derive grid dims from staticmaps template
+        da_template = self.staticmaps.data[self._MAPS["rivmsk"]]
+        y_dim_name = da_template.raster.y_dim
+        x_dim_name = da_template.raster.x_dim
+        n_y = da_template.sizes[y_dim_name]
+        n_x = da_template.sizes[x_dim_name]
+
+        # store snapped inflow-id map in staticmaps (0 = no inflow)
+        _tmp_sm_da = da_template.copy() * 0
+        for _id, _idx in zip(ids, idxs):
+            row, col = np.unravel_index(_idx, (n_y, n_x))
+            _tmp_sm_da.values[row, col] = _id
+        self.staticmaps.set(_tmp_sm_da, name=f"{out_var}_id")
+        logger.info(f"Added {out_var}_id to staticmaps")
+
+        # re-load scalar intermediate and scatter onto the 3-D model grid
+        tmp_ds = xr.open_dataset(out_fn)
+        time_index = tmp_ds[time_dim].values
+
+        data = np.zeros((len(time_index), n_y, n_x), dtype=np.float32)
+        for _id, _idx in zip(ids, idxs):
+            row, col = np.unravel_index(_idx, (n_y, n_x))
+            data[:, row, col] = tmp_ds[out_var].sel({id_dim: _id}).values.astype(np.float32)
+        tmp_ds.close()
+
+        da_inflow = xr.DataArray(
+            data,
+            dims=[time_dim, y_dim_name, x_dim_name],
+            coords={
+                time_dim: time_index,
+                y_dim_name: da_template.coords[y_dim_name],
+                x_dim_name: da_template.coords[x_dim_name],
+            },
+            attrs={"units": "m3/s", "long_name": wflow_var},
+        )
+        da_inflow.encoding.update({
+            "dtype": "float32",
+            "zlib": True,
+            "complevel": 1,
+            "chunksizes": (1, n_y, n_x),
+            "_FillValue": np.float32(-9999.0),
+        })
+
+        self.forcing.set(da_inflow, name=out_var)
+        self.config.set(f"input.forcing.{wflow_var}", out_var)
+
+
+
+    @hydromt_step
     def setup_temp_pet_forcing(
         self,
         temp_pet_fn: str | xr.Dataset,

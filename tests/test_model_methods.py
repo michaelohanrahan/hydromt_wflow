@@ -1678,3 +1678,90 @@ def test_setup_cold_states(example_wflow_model: WflowSbmModel, tmpdir: Path):
         xr.merge(states.values(), compat="override"),
         xr.merge(example_wflow_model.states.data.values(), compat="override"),
     )
+
+
+def test_setup_point_series_river_flux(
+    example_wflow_model: WflowSbmModel, tmp_path: Path
+):
+    """Smoke test: two inflow points snap to river cells and appear in forcing."""
+    # Build synthetic inflow GeoDataset matching the model time range
+    time_index = pd.date_range("2010-02-02", "2010-02-10", freq="1D")
+    lons = [12.45, 12.30]
+    lats = [46.4833, 46.4000]
+    ids = [1, 2]
+
+    rng = np.random.default_rng(0)
+    Q_data = np.column_stack([
+        50.0 + rng.normal(0, 5, len(time_index)),
+        20.0 + rng.normal(0, 2, len(time_index)),
+    ]).astype(np.float32)
+
+    ds_inflow = xr.Dataset(
+        {
+            "Q": xr.DataArray(
+                data=Q_data,
+                dims=["time", "inflow_id"],
+                coords={
+                    "time": time_index,
+                    "inflow_id": ids,
+                    "lon": ("inflow_id", lons),
+                    "lat": ("inflow_id", lats),
+                },
+                attrs={"units": "m3/s"},
+            )
+        }
+    )
+
+    inflow_nc = tmp_path / "inflow_sources.nc"
+    ds_inflow.to_netcdf(inflow_nc)
+
+    source = create_source(
+        data={
+            "name": "test_inflow",
+            "data_type": "GeoDataset",
+            "driver": {"name": "geodataset_xarray"},
+            "uri": str(inflow_nc),
+            "metadata": {"crs": "EPSG:4326"},
+        }
+    )
+    example_wflow_model.data_catalog.add_source(name="test_inflow", source=source)
+
+    example_wflow_model.setup_point_series_river_flux(
+        geodataset_source="test_inflow",
+        flux_var="Q",
+        wflow_var="river_water__external_inflow_volume_flow_rate",
+        out_var="inflow",
+        add_q_mask=True,
+        max_dist=5e3,
+    )
+
+    forcing = example_wflow_model.forcing.data
+
+    # Both output variables must be present
+    assert "inflow" in forcing
+    assert "Q_mask" in forcing
+
+    da_inflow = forcing["inflow"]
+    da_qmask = forcing["Q_mask"]
+
+    # Shape: (n_time, n_y, n_x) matching existing forcing grid
+    existing = next(
+        v for k, v in forcing.items() if k not in ("inflow", "Q_mask")
+    )
+    assert da_inflow.shape == existing.shape
+
+    # At least one non-zero cell snapped successfully
+    assert int((da_inflow.values != 0).any(axis=0).sum()) >= 1
+
+    # Q_mask active cells match inflow non-zero cells (time-collapsed)
+    active_inflow = (da_inflow.values != 0).any(axis=0)
+    active_mask = (da_qmask.values != 0).any(axis=0)
+    assert np.array_equal(active_inflow, active_mask)
+
+    # TOML config must be updated with the new variable mapping
+    assert (
+        example_wflow_model.config.get_value(
+            "input.forcing.river_water__external_inflow_volume_flow_rate"
+        )
+        == "inflow"
+    )
