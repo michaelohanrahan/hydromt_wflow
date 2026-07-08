@@ -104,7 +104,7 @@ def average_soillayers_block(ds, soilthickness, soildepth_cm):
     # set NaN values to 0.0 (to avoid RuntimeWarning in comparison soildepth)
     d = soilthickness.fillna(0.0)
 
-    # Extend the deepest layer down to soilthickness so the 
+    # Extend the deepest layer down to soilthickness so the
     # now allowing for the case where soilthickness exceeds the deepest soil property layer
     edges = np.asarray(soildepth_cm, dtype=float).copy()
     edges[-1] = 1.0e6
@@ -605,6 +605,24 @@ def soilgrids(
         thetas = average_soillayers(thetas_sl, ds["soilthickness"], soildepth_cm)
     thetas = thetas.raster.reproject_like(ds_like, method="average")
     ds_out["theta_s"] = thetas.astype(np.float32)
+
+    logger.info("calculate and resample theta_fc")
+    thetafc_sl = xr.apply_ufunc(
+        ptf.thetafc_toth,
+        ds["oc"],
+        ds["clyppt"],
+        ds["sltppt"],
+        dask="parallelized",
+        output_dtypes=[float],
+        keep_attrs=True,
+    )
+
+    if soil_fn == "interval":
+        thetafc = average_soillayers_block(thetafc_sl, ds["soilthickness"], soildepth_cm)
+    else:
+        thetafc = average_soillayers(thetafc_sl, ds["soilthickness"], soildepth_cm)
+    thetafc = thetafc.raster.reproject_like(ds_like, method="average")
+    ds_out["theta_fc"] = thetafc.astype(np.float32)
 
     logger.info("calculate and resample theta_r")
     thetar_sl = xr.apply_ufunc(

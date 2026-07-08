@@ -236,6 +236,11 @@ WFLOW_NAMES: dict[str, dict[str, str | None]] = {
         "wflow_v1": "soil_water__residual_volume_fraction",
         "hydromt_name": "theta_r",
     },
+    "soil_theta_fc": {
+        "wflow_v0": None,
+        "wflow_v1": "soil_water__field_capacity_volume_fraction",
+        "hydromt_name": "theta_fc",
+    },
     "soil_theta_s": {
         "wflow_v0": ["vertical.theta_s", "vertical.θₛ"],
         "wflow_v1": "soil_water__saturated_volume_fraction",
