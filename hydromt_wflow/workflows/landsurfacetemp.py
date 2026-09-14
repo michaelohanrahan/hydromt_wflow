@@ -708,8 +708,9 @@ def setup_shortwave(
             freq=freq,
             reproj_method=reproj_method,
         )
-        # Store shortwave_in in memory for calculations but don't write to forcing
-        mod.forcing.data["shortwave_in"] = shortwave_out
+        # Store shortwave_in temporarily for calculations (will be removed later)
+        # Use forcing.set() to ensure proper tracking, but we'll delete it before writing
+        mod.forcing.set(shortwave_out, name="shortwave_in")
     else:
         raise ValueError(f"Invalid type for shortwave: {type(shortwave)}")
 

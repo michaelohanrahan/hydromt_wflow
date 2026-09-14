@@ -20,7 +20,7 @@ from hydromt.gis import flw
 from hydromt.model import Model, ModelRoot
 
 import hydromt_wflow.utils as utils
-from hydromt_wflow import workflows
+from . import workflows
 from hydromt_wflow.components import (
     WflowConfigComponent,
     WflowForcingComponent,
@@ -1917,6 +1917,11 @@ one variable and variables list is not provided."
                 self.config.set(f"{_prefix}.{var}", staticmap_name)
                 logger.debug(f"Updated config: {_prefix}.{var} = {staticmap_name}")
             else:
+                # Skip warnings for internal hydromt meta_* variables
+                if var.startswith("meta_") or var in ["elevtn"]:
+                    # These are internal hydromt variables, not Wflow parameters
+                    continue
+                
                 manual_mappings = {
                     "wind": "land_surface_air_flow__speed",
                     "wind_speed": "land_surface_air_flow__speed",
