@@ -23,54 +23,55 @@ __all__ = [
     "lai_from_lulc_mapping",
     "add_paddy_to_landuse",
     "add_planted_forest_to_landuse",
-    "LULC_VARS_MAPPING",
     "validate_lulc_vars",
+    "LULC_VARS_MAPPING",
 ]
 
 
-RESAMPLING = {
-    "landuse": "nearest",
+_RESAMPLING = {
+    "landuse": "mode",
     "lai": "average",
     "vegetation_feddes_alpha_h1": "mode",
 }
-DTYPES = {"landuse": np.int16, "vegetation_feddes_alpha_h1": np.int16}
 
-# Mapping from parameter names to Wflow variable names
 LULC_VARS_MAPPING = {
     "landuse": None,
-    "vegetation_kext": "vegetation_canopy__light-extinction_coefficient",
+    "vegetation_kext": "vegetation_canopy__light_extinction_coefficient",
     "land_manning_n": "land_surface_water_flow__manning_n_parameter",
-    "soil_compacted_fraction": "soil_compacted__area_fraction",
+    "soil_compacted_fraction": "compacted_soil__area_fraction",
     "vegetation_root_depth": "vegetation_root__depth",
-    "vegetation_leaf_storage": "vegetation__specific-leaf_storage",
+    "vegetation_leaf_storage": "vegetation__specific_leaf_storage",
     "vegetation_wood_storage": "vegetation_wood_water__storage_capacity",
     "land_water_fraction": "land_water_covered__area_fraction",
     "vegetation_crop_factor": "vegetation__crop_factor",
-    "vegetation_feddes_alpha_h1": "vegetation_root__feddes_critical_pressure_head_h1_reduction_coefficient",
+    "vegetation_feddes_alpha_h1": "vegetation_root__feddes_critical_pressure_head_h1_reduction_coefficient",  # noqa: E501
     "vegetation_feddes_h1": "vegetation_root__feddes_critical_pressure_head_h1",
     "vegetation_feddes_h2": "vegetation_root__feddes_critical_pressure_head_h2",
-    "vegetation_feddes_h3_high": "vegetation_root__feddes_critical_pressure_head_h3_high",
+    "vegetation_feddes_h3_high": "vegetation_root__feddes_critical_pressure_head_h3_high",  # noqa: E501
     "vegetation_feddes_h3_low": "vegetation_root__feddes_critical_pressure_head_h3_low",
     "vegetation_feddes_h4": "vegetation_root__feddes_critical_pressure_head_h4",
+    "erosion_usle_c": "soil_erosion__usle_c_factor",
 }
 
 
-def validate_lulc_vars(lulc_vars: list[str]) -> None:
-    """Validate that all lulc_vars are valid parameter names.
-    
+def validate_lulc_vars(lulc_vars: list[str]):
+    """Throw an error if any lulc_vars are incorrect.
+
     Parameters
     ----------
     lulc_vars : list[str]
-        List of landuse parameter names to validate.
-        
+        The lulc_vars that are given to functions like setup_landuse.
+
     Raises
     ------
-    ValueError
-        If any parameter name is not in LULC_VARS_MAPPING.
+        ValueError: An error that indicates which values are not allowed for lulc_vars.
     """
-    invalid = [var for var in lulc_vars if var not in LULC_VARS_MAPPING]
-    if invalid:
-        raise ValueError(f"Invalid lulc_vars: {invalid}. Valid options are: {list(LULC_VARS_MAPPING.keys())}")
+    invalid_vars = set(lulc_vars).difference(LULC_VARS_MAPPING.keys())
+    if invalid_vars:
+        raise ValueError(
+            f"Invalid lulc_vars: {invalid_vars}. "
+            f"Allowed values are: {list(LULC_VARS_MAPPING.keys())}."
+        )
 
 
 def landuse(
@@ -83,6 +84,10 @@ def landuse(
 
     The parameter maps are prepared based on landuse map and
     mapping table as provided in the generic data folder of hydromt.
+
+    For vegetation_crop_factor, land use types without any vegetation (e.g. water,
+    bare soil) should have a crop factor equivalent to the nodata value. After
+    mapping and resampling, the nodata values will be filled with 1.
 
     Parameters
     ----------
@@ -112,7 +117,7 @@ def landuse(
     da = da.raster.interpolate_na(method="nearest")
     # apply for each parameter
     for param in params:
-        method = RESAMPLING.get(param, "average")
+        method = _RESAMPLING.get(param, "average")
         values = df[param].values
         nodata = values[-1]  # NOTE values is set in last row
         d = dict(zip(keys, values))  # NOTE global param in reclass method
@@ -124,6 +129,10 @@ def landuse(
         ds_out[param] = da_param.raster.reproject_like(
             ds_like, method=method
         )  # then resample
+
+        # For crop factor, fill nodata with 1 (no effect on evapotranspiration)
+        if param == "vegetation_crop_factor":
+            ds_out[param] = ds_out[param].where(ds_out[param] != nodata, 1.0)
 
     return ds_out
 
@@ -240,7 +249,7 @@ def lai(da: xr.DataArray, ds_like: xr.Dataset):
         da = da["LAI"]
     elif not isinstance(da, xr.DataArray):
         raise ValueError("lai method requires a DataArray or Dataset with LAI array")
-    method = RESAMPLING.get(da.name, "average")
+    method = "average"
     nodata = da.raster.nodata
     logger.info(f"Deriving {da.name} using {method} resampling (nodata={nodata}).")
     da = da.astype(np.float32)

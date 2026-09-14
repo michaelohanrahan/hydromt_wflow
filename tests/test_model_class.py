@@ -8,18 +8,39 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from hydromt_wflow import DATA_DIR
 from hydromt_wflow.wflow_base import WflowBaseModel
 from hydromt_wflow.wflow_sbm import WflowSbmModel
 from hydromt_wflow.wflow_sediment import WflowSedimentModel
 
 TESTDATADIR = join(dirname(abspath(__file__)), "data")
 EXAMPLEDIR = join(dirname(abspath(__file__)), "..", "examples")
+pytestmark = pytest.mark.integration  # all tests in this module are integration tests
 
 _supported_models: dict[str, type[WflowBaseModel]] = {
     "wflow": WflowSbmModel,
     "wflow_sediment": WflowSedimentModel,
     "wflow_simple": WflowSbmModel,
 }
+
+
+def _assert_dataset_not_empty(ds: xr.Dataset) -> tuple[bool, list[str]]:
+    counts = ds.count().to_pandas()
+    empty_layers = counts[counts == 0]
+    if len(empty_layers) > 0:
+        return False, list(counts.index)
+    else:
+        return True, []
+
+
+def _assert_grids_not_empty(model: WflowBaseModel):
+    if model.staticmaps._data:
+        eq, empty_layers = _assert_dataset_not_empty(model.staticmaps._data)
+        assert eq, f"empty layers in staticmaps: {empty_layers}"
+
+    if model.forcing._data:
+        eq, empty_layers = _assert_dataset_not_empty(model.forcing._data)
+        assert eq, f"empty layers in forcing: {empty_layers}"
 
 
 def _compare_wflow_models(mod0: WflowBaseModel, mod1: WflowBaseModel):
@@ -33,6 +54,11 @@ def _compare_wflow_models(mod0: WflowBaseModel, mod1: WflowBaseModel):
         eq, errors = mod0.geoms.test_equal(mod1.geoms)
         assert eq, f"geoms not equal: {errors}"
 
+    if mod0.forcing._data:
+        # flatten
+        eq, errors = mod0.forcing.test_equal(mod1.forcing)
+        assert eq, f"forcing not equal: {errors}"
+
     # check config
     if mod0.config._data:
         # flatten
@@ -45,14 +71,13 @@ def _compare_wflow_models(mod0: WflowBaseModel, mod1: WflowBaseModel):
 )
 @pytest.mark.timeout(300)  # max 5 min
 @pytest.mark.parametrize("model", list(_supported_models.keys()))
+@pytest.mark.integration
 def test_model_build(tmpdir, model, example_models, example_inis):
     # get model type
     model_type = _supported_models[model]
     # create folder to store new model
     root = str(tmpdir.join(model))
-    param_path = (
-        Path(__file__).parent.parent / "hydromt_wflow" / "data" / "parameters_data.yml"
-    )
+    param_path = DATA_DIR / "parameters_data.yml"
     mod1 = model_type(
         root=root, mode="w", data_libs=["artifact_data", param_path.as_posix()]
     )
@@ -71,6 +96,10 @@ def test_model_build(tmpdir, model, example_models, example_inis):
     mod0 = example_models[model]
     if mod0 is not None:
         mod0.read()
+
+        # make sure models aren't empty
+        _assert_grids_not_empty(mod0)
+
         # compare models
         _compare_wflow_models(mod0, mod1)
 
@@ -87,6 +116,7 @@ def test_base_model_init_should_raise():
 
 
 @pytest.mark.timeout(60)  # max 1 min
+@pytest.mark.integration
 def test_model_clip(
     tmpdir: Path,
     example_wflow_model: WflowSbmModel,

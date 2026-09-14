@@ -1,12 +1,11 @@
 """Implement Wflow base model class."""
 
 # Implement model class following model API
-import glob
 import logging
 import os
-from os.path import abspath, dirname, isdir, isfile, join
+from os.path import isfile, join
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import geopandas as gpd
 import numpy as np
@@ -17,10 +16,10 @@ import xarray as xr
 from hydromt import hydromt_step
 from hydromt.error import NoDataStrategy
 from hydromt.gis import flw
-from hydromt.model import Model, ModelRoot
+from hydromt.model import Model
 
 import hydromt_wflow.utils as utils
-from . import workflows
+from hydromt_wflow import workflows
 from hydromt_wflow.components import (
     WflowConfigComponent,
     WflowForcingComponent,
@@ -742,24 +741,25 @@ and will soon be removed. '
     def setup_lulcmaps(
         self,
         lulc_fn: str | xr.DataArray,
+        *,
         lulc_mapping_fn: str | Path | pd.DataFrame | None = None,
-        lulc_vars: dict = {
-            "landuse": None,
-            "vegetation_kext": "vegetation_canopy__light-extinction_coefficient",
-            "land_manning_n": "land_surface_water_flow__manning_n_parameter",
-            "soil_compacted_fraction": "soil_compacted__area_fraction",
-            "vegetation_root_depth": "vegetation_root__depth",
-            "vegetation_leaf_storage": "vegetation__specific-leaf_storage",
-            "vegetation_wood_storage": "vegetation_wood_water__storage_capacity",
-            "land_water_fraction": "land_water_covered__area_fraction",
-            "vegetation_crop_factor": "vegetation__crop_factor",
-            "vegetation_feddes_alpha_h1": "vegetation_root__feddes_critical_pressure_head_h1_reduction_coefficient",  # noqa: E501
-            "vegetation_feddes_h1": "vegetation_root__feddes_critical_pressure_head_h1",
-            "vegetation_feddes_h2": "vegetation_root__feddes_critical_pressure_head_h2",
-            "vegetation_feddes_h3_high": "vegetation_root__feddes_critical_pressure_head_h3_high",  # noqa: E501
-            "vegetation_feddes_h3_low": "vegetation_root__feddes_critical_pressure_head_h3_low",  # noqa: E501
-            "vegetation_feddes_h4": "vegetation_root__feddes_critical_pressure_head_h4",
-        },
+        lulc_vars: list[str] = [
+            "landuse",
+            "vegetation_kext",
+            "land_manning_n",
+            "soil_compacted_fraction",
+            "vegetation_root_depth",
+            "vegetation_leaf_storage",
+            "vegetation_wood_storage",
+            "land_water_fraction",
+            "vegetation_crop_factor",
+            "vegetation_feddes_alpha_h1",
+            "vegetation_feddes_h1",
+            "vegetation_feddes_h2",
+            "vegetation_feddes_h3_high",
+            "vegetation_feddes_h3_low",
+            "vegetation_feddes_h4",
+        ],
         output_names_suffix: str | None = None,
     ):
         """
@@ -769,6 +769,10 @@ and will soon be removed. '
         parameters based on literature. The data is remapped at its original resolution
         and then resampled to the model resolution using the average value, unless noted
         differently.
+
+        For vegetation_crop_factor, land use types without any vegetation (e.g. water,
+        bare soil) should have a crop factor equivalent to the nodata value. After
+        mapping and resampling, the nodata values will be filled with 1.
 
         Currently, if `lulc_fn` is set to the "vito", "globcover", "esa_worldcover"
         "corine" or "glmnco", default lookup tables are available and will be used if
@@ -826,29 +830,28 @@ and will soon be removed. '
             in lulc_vars. If lulc_fn is one of {"globcover", "vito", "corine",
             "esa_worldcover", "glmnco"}, a default mapping is used and this argument
             becomes optional.
-        lulc_vars : dict
-            Dictionnary of landuse parameters to prepare. The names are the
-            the columns of the mapping file and the values are the corresponding
-            Wflow.jl variables if any.
+        lulc_vars : list[str]
+            List of landuse parameters to prepare.
+            The names are the columns of the mapping file.
+            Can be a subset of: ["landuse", "vegetation_kext", "land_manning_n",
+            "soil_compacted_fraction", "vegetation_root_depth",
+            "vegetation_leaf_storage", "vegetation_wood_storage", "land_water_fraction",
+            "vegetation_crop_factor", "vegetation_feddes_alpha_h1",
+            "vegetation_feddes_h1", "vegetation_feddes_h2", "vegetation_feddes_h3_high",
+            "vegetation_feddes_h3_low", "vegetation_feddes_h4"]
         output_names_suffix : str, optional
             Suffix to be added to the output names to avoid having to rename all the
             columns of the mapping tables. For example if the suffix is "vito", all
             variables in lulc_vars will be renamed to "landuse_vito", "Kext_vito", etc.
         """
+        workflows.validate_lulc_vars(lulc_vars)
         output_names = {
-            v: f"{k}_{output_names_suffix}" if output_names_suffix else k
-            for k, v in lulc_vars.items()
+            workflows.LULC_VARS_MAPPING[k]: f"{k}_{output_names_suffix}"
+            if output_names_suffix
+            else k
+            for k in lulc_vars
         }
         self._update_naming(output_names)
-
-        # As landuse is not a wflow variable, we update the name manually
-        rmdict = {"landuse": "meta_landuse"} if "landuse" in lulc_vars else {}
-        if output_names_suffix is not None:
-            self._MAPS["landuse"] = f"meta_landuse_{output_names_suffix}"
-            # rename dict for the staticmaps (hydromt names are not used in that case)
-            rmdict = {k: f"{k}_{output_names_suffix}" for k in lulc_vars.keys()}
-            if "landuse" in lulc_vars:
-                rmdict["landuse"] = f"meta_landuse_{output_names_suffix}"
 
         logger.info("Preparing LULC parameter maps.")
         if lulc_mapping_fn is None:
@@ -860,42 +863,40 @@ and will soon be removed. '
         )
         df_map = self.data_catalog.get_dataframe(
             lulc_mapping_fn,
-            driver_kwargs={"index_col": 0},  # only used if fn_map is a file path
+            source_kwargs={"driver": {"name": "pandas", "options": {"index_col": 0}}},
         )
         # process landuse
         ds_lulc_maps = workflows.landuse(
             da=da,
             ds_like=self.staticmaps.data,
             df=df_map,
-            params=list(lulc_vars.keys()),
+            params=lulc_vars,
         )
-        self.staticmaps.set(ds_lulc_maps.rename(rmdict))
-
-        # Add entries to the config
-        self._update_config_variable_name(ds_lulc_maps.rename(rmdict).data_vars)
+        self._set_landuse_on_staticmaps(ds_lulc_maps, lulc_vars, output_names_suffix)
 
     @hydromt_step
     def setup_lulcmaps_from_vector(
         self,
         lulc_fn: str | gpd.GeoDataFrame,
+        *,
         lulc_mapping_fn: str | Path | pd.DataFrame | None = None,
-        lulc_vars: dict = {
-            "landuse": None,
-            "vegetation_kext": "vegetation_canopy__light-extinction_coefficient",
-            "land_manning_n": "land_surface_water_flow__manning_n_parameter",
-            "soil_compacted_fraction": "soil_compacted__area_fraction",
-            "vegetation_root_depth": "vegetation_root__depth",
-            "vegetation_leaf_storage": "vegetation__specific-leaf_storage",
-            "vegetation_wood_storage": "vegetation_wood_water__storage_capacity",
-            "land_water_fraction": "land_water_covered__area_fraction",
-            "vegetation_crop_factor": "vegetation__crop_factor",
-            "vegetation_feddes_alpha_h1": "vegetation_root__feddes_critical_pressure_head_h1_reduction_coefficient",  # noqa: E501
-            "vegetation_feddes_h1": "vegetation_root__feddes_critical_pressure_head_h1",
-            "vegetation_feddes_h2": "vegetation_root__feddes_critical_pressure_head_h2",
-            "vegetation_feddes_h3_high": "vegetation_root__feddes_critical_pressure_head_h3_high",  # noqa: E501
-            "vegetation_feddes_h3_low": "vegetation_root__feddes_critical_pressure_head_h3_low",  # noqa: E501
-            "vegetation_feddes_h4": "vegetation_root__feddes_critical_pressure_head_h4",
-        },
+        lulc_vars: list[str] = [
+            "landuse",
+            "vegetation_kext",
+            "land_manning_n",
+            "soil_compacted_fraction",
+            "vegetation_root_depth",
+            "vegetation_leaf_storage",
+            "vegetation_wood_storage",
+            "land_water_fraction",
+            "vegetation_crop_factor",
+            "vegetation_feddes_alpha_h1",
+            "vegetation_feddes_h1",
+            "vegetation_feddes_h2",
+            "vegetation_feddes_h3_high",
+            "vegetation_feddes_h3_low",
+            "vegetation_feddes_h4",
+        ],
         lulc_res: float | int | None = None,
         all_touched: bool = False,
         buffer: int = 1000,
@@ -912,6 +913,10 @@ and will soon be removed. '
         parameters based on literature. The data is remapped at its original resolution
         and then resampled to the model resolution using the average value, unless noted
         differently.
+
+        For vegetation_crop_factor, land use types without any vegetation (e.g. water,
+        bare soil) should have a crop factor equivalent to the nodata value. After
+        mapping and resampling, the nodata values will be filled with 1.
 
         Adds model layers:
 
@@ -961,16 +966,21 @@ and will soon be removed. '
             GeoDataFrame or name in data catalog / path to (vector) landuse map.
 
             * Required columns: 'landuse' [-]
-        lulc_mapping_fn : str, Path, pd.DataFrame
+        lulc_mapping_fn : str, Path, pd.DataFrame, None, optional
             Path to a mapping csv file from landuse in source name to parameter values
             in lulc_vars. If lulc_fn is one of {"globcover", "vito", "corine",
             "esa_worldcover", "glmnco"}, a default mapping is used and this argument
             becomes optional.
-        lulc_vars : dict
-            Dictionnary of landuse parameters to prepare. The names are the
-            the columns of the mapping file and the values are the corresponding
-            Wflow.jl variables.
-        lulc_res : float, int, optional
+        lulc_vars : list[str], optional
+            List of landuse parameters to prepare.
+            The names are the columns of the mapping file.
+            Can be a subset of: ["landuse", "vegetation_kext", "land_manning_n",
+            "soil_compacted_fraction", "vegetation_root_depth",
+            "vegetation_leaf_storage", "vegetation_wood_storage", "land_water_fraction",
+            "vegetation_crop_factor", "vegetation_feddes_alpha_h1",
+            "vegetation_feddes_h1", "vegetation_feddes_h2", "vegetation_feddes_h3_high",
+            "vegetation_feddes_h3_low", "vegetation_feddes_h4"]
+        lulc_res : float, int, None, optional
             Resolution of the intermediate rasterized landuse map. The unit (meter or
             degree) depends on the CRS of lulc_fn (projected or not). By default None,
             which uses the model resolution.
@@ -983,7 +993,7 @@ and will soon be removed. '
         save_raster_lulc : bool, optional
             If True, the (high) resolution rasterized landuse map will be saved to
             maps/landuse_raster.tif, by default False.
-        output_names_suffix : str, optional
+        output_names_suffix : str, None, optional
             Suffix to be added to the output names to avoid having to rename all the
             columns of the mapping tables. For example if the suffix is "vito", all
             variables in lulc_vars will be renamed to "landuse_vito", "Kext_vito", etc.
@@ -992,28 +1002,23 @@ and will soon be removed. '
         --------
         workflows.landuse_from_vector
         """
+        logger.info("Preparing LULC parameter maps.")
+        workflows.validate_lulc_vars(lulc_vars)
+
         output_names = {
-            v: f"{k}_{output_names_suffix}" if output_names_suffix else k
-            for k, v in lulc_vars.items()
+            workflows.LULC_VARS_MAPPING[k]: f"{k}_{output_names_suffix}"
+            if output_names_suffix
+            else k
+            for k in lulc_vars
         }
         self._update_naming(output_names)
 
-        # As landuse is not a wflow variable, we update the name manually
-        rmdict = {"landuse": "meta_landuse"} if "landuse" in lulc_vars else {}
-        if output_names_suffix is not None:
-            self._MAPS["landuse"] = f"meta_landuse_{output_names_suffix}"
-            # rename dict for the staticmaps (hydromt names are not used in that case)
-            rmdict = {k: f"{k}_{output_names_suffix}" for k in lulc_vars.keys()}
-            if "landuse" in lulc_vars:
-                rmdict["landuse"] = f"meta_landuse_{output_names_suffix}"
-
-        logger.info("Preparing LULC parameter maps.")
         # Read mapping table
         if lulc_mapping_fn is None:
             lulc_mapping_fn = f"{lulc_fn}_mapping_default"
         df_map = self.data_catalog.get_dataframe(
             lulc_mapping_fn,
-            driver_kwargs={"index_col": 0},  # only used if fn_map is a file path
+            source_kwargs={"driver": {"name": "pandas", "options": {"index_col": 0}}},
         )
         # read landuse map
         gdf = self.data_catalog.get_geodataframe(
@@ -1022,6 +1027,7 @@ and will soon be removed. '
             buffer=buffer,
             variables=["landuse"],
         )
+
         if save_raster_lulc:
             lulc_out = join(self.root.path, "maps", "landuse_raster.tif")
         else:
@@ -1032,15 +1038,14 @@ and will soon be removed. '
             gdf=gdf,
             ds_like=self.staticmaps.data,
             df=df_map,
-            params=list(lulc_vars.keys()),
+            params=lulc_vars,
             lulc_res=lulc_res,
             all_touched=all_touched,
             buffer=buffer,
             lulc_out=lulc_out,
         )
-        self.staticmaps.set(ds_lulc_maps.rename(rmdict))
-        # update config variable names
-        self._update_config_variable_name(ds_lulc_maps.rename(rmdict).data_vars)
+
+        self._set_landuse_on_staticmaps(ds_lulc_maps, lulc_vars, output_names_suffix)
 
     @hydromt_step
     def setup_outlets(
@@ -1272,7 +1277,7 @@ gauge locations [-] (if derive_subcatch)
                 geom=self.basins,
                 # assert_gtype="Point", hydromt#1243
                 handle_nodata=NoDataStrategy.IGNORE,
-                **kwargs,
+                source_kwargs=kwargs,
             )
         elif self.data_catalog.contains_source(gauges_fn):
             if self.data_catalog.get_source(gauges_fn).data_type == "GeoDataFrame":
@@ -1281,7 +1286,7 @@ gauge locations [-] (if derive_subcatch)
                     geom=self.basins,
                     # assert_gtype="Point", hydromt#1243
                     handle_nodata=NoDataStrategy.IGNORE,
-                    **kwargs,
+                    source_kwargs=kwargs,
                 )
             elif self.data_catalog.get_source(gauges_fn).data_type == "GeoDataset":
                 da = self.data_catalog.get_geodataset(
@@ -1289,7 +1294,7 @@ gauge locations [-] (if derive_subcatch)
                     geom=self.basins,
                     # assert_gtype="Point", hydromt#1243
                     handle_nodata=NoDataStrategy.IGNORE,
-                    **kwargs,
+                    source_kwargs=kwargs,
                 )
                 gdf_gauges = da.vector.to_gdf()
                 # Check for point geometry
@@ -1675,7 +1680,7 @@ one variable and variables list is not provided."
         self.basins
         self.rivers
         self.setup_outlets()
-        exclude_geoms = ["basins", "basins_highres", "region", "rivers", "outlets"]
+        exclude_geoms = ["basins", "meta_basins_highres", "region", "rivers", "outlets"]
         for name, gdf in old_geoms.items():
             if name not in exclude_geoms:
                 logger.debug(f"Clipping geometry {name}..")
@@ -1857,33 +1862,6 @@ one variable and variables list is not provided."
             else:
                 logger.warning(f"Wflow variable {wflow_var} not found, check spelling.")
 
-    def _set_landuse_on_staticmaps(
-        self, landuse_maps: xr.Dataset, lulc_vars: list[str], output_names_suffix: str | None = None
-    ) -> None:
-        """Set landuse maps on staticmaps with proper renaming.
-        
-        Parameters
-        ----------
-        landuse_maps : xr.Dataset
-            Dataset containing landuse parameter maps.
-        lulc_vars : list[str]
-            List of landuse parameter names.
-        output_names_suffix : str, optional
-            Suffix to add to output names.
-        """
-        # As landuse is not a wflow variable, we update the name manually
-        rmdict = {"landuse": "meta_landuse"} if "landuse" in lulc_vars else {}
-        if output_names_suffix is not None:
-            self._MAPS["landuse"] = f"meta_landuse_{output_names_suffix}"
-            # rename dict for the staticmaps (hydromt names are not used in that case)
-            rmdict = {k: f"{k}_{output_names_suffix}" for k in lulc_vars}
-            if "landuse" in lulc_vars:
-                rmdict["landuse"] = f"meta_landuse_{output_names_suffix}"
-        
-        self.staticmaps.set(landuse_maps.rename(rmdict))
-        # update config
-        self._update_config_variable_name(landuse_maps.rename(rmdict).data_vars)
-
     def _update_config_variable_name(
         self, data_vars: str | list[str], data_type: str | None = "static"
     ):
@@ -1898,41 +1876,14 @@ one variable and variables list is not provided."
         """
         data_vars = [data_vars] if isinstance(data_vars, str) else data_vars
         _prefix = f"input.{data_type}" if data_type is not None else "input"
-        # Create inverse mapping: staticmap_name -> wflow_variable_name
-        _wflow_names_inv = {v: k for k, v in self._WFLOW_NAMES.items()}
         for var in data_vars:
-            # Check if var is a staticmap name (key in _WFLOW_NAMES)
             if var in self._WFLOW_NAMES:
-                # Get the Wflow parameter name from the staticmap name
-                wflow_param_name = self._WFLOW_NAMES[var]
-                if wflow_param_name is not None:
-                    # Update the config: Wflow parameter name on LEFT, staticmap name on RIGHT
-                    self.config.set(f"{_prefix}.{wflow_param_name}", var)
-                    logger.debug(f"Updated config: {_prefix}.{wflow_param_name} = {var}")
-            # Check if var is a wflow variable name (value in _WFLOW_NAMES)
-            elif var in _wflow_names_inv:
-                # Get the staticmap name from the wflow variable name
-                staticmap_name = _wflow_names_inv[var]
-                # Update the config: Wflow parameter name on LEFT, staticmap name on RIGHT
-                self.config.set(f"{_prefix}.{var}", staticmap_name)
-                logger.debug(f"Updated config: {_prefix}.{var} = {staticmap_name}")
-            else:
-                # Skip warnings for internal hydromt meta_* variables
-                if var.startswith("meta_") or var in ["elevtn"]:
-                    # These are internal hydromt variables, not Wflow parameters
-                    continue
-                
-                manual_mappings = {
-                    "wind": "land_surface_air_flow__speed",
-                    "wind_speed": "land_surface_air_flow__speed",
-                }
-                if var in manual_mappings:
-                    wflow_param_name = manual_mappings[var]
-                    self.config.set(f"{_prefix}.{wflow_param_name}", var)
-                    logger.info(f"Manually mapped {var} to {wflow_param_name} in config")
-                else:
-                    # Variable not found in mapping
-                    logger.warning(f"Variable '{var}' not found in WFLOW_NAMES mapping for {data_type}, skipping config update")
+                # Get the name from the Wflow variable name
+                wflow_var = self._WFLOW_NAMES[var]
+                # Update the config variable name
+                self.config.set(f"{_prefix}.{wflow_var}", var)
+            # else not a wflow variable
+            # (spelling mistakes should have been checked in _update_naming)
 
     ## WFLOW specific data and method
     # Non model component properties
@@ -1957,8 +1908,8 @@ one variable and variables list is not provided."
     @property
     def basins_highres(self) -> gpd.GeoDataFrame | None:
         """Returns a high resolution basin(s) geometry."""
-        if "basins_highres" in self.geoms.data:
-            gdf = self.geoms.get("basins_highres")
+        if "meta_basins_highres" in self.geoms.data:
+            gdf = self.geoms.get("meta_basins_highres")
         else:
             gdf = self.basins
         return gdf
@@ -2004,73 +1955,16 @@ one variable and variables list is not provided."
             mask=(self.staticmaps.data[self._MAPS["basins"]] > 0),
         )
 
-    def set_root(self, root: Optional[str], mode: Optional[str] = "w") -> None:
-        """Initialize the model root.
+    def _set_landuse_on_staticmaps(self, ds_lulc_maps, lulc_vars, output_names_suffix):
+        # As landuse is not a wflow variable, we update the name manually
+        rename_dict = {"landuse": "meta_landuse"} if "landuse" in lulc_vars else {}
+        if output_names_suffix is not None:
+            self._MAPS["landuse"] = f"meta_landuse_{output_names_suffix}"
+            # rename dict for the staticmaps (hydromt names are not used in that case)
+            rename_dict = {k: f"{k}_{output_names_suffix}" for k in lulc_vars}
+            if "landuse" in lulc_vars:
+                rename_dict["landuse"] = f"meta_landuse_{output_names_suffix}"
 
-        In read/append mode a check is done if the root exists.
-        In write mode the required model folder structure is created.
-
-        Parameters
-        ----------
-        root : str, optional
-            path to model root
-        mode : {"r", "r+", "w", "w+"}, optional
-            read/append/write mode for model files
-        """
-        ignore_ext = set([".log", ".yml"])
-
-        if mode not in ["r", "r+", "w", "w+"]:
-            raise ValueError(
-                f'mode "{mode}" unknown, select from "r", "r+", "w" or "w+"'
-            )
-
-        new_root = root if root is None else abspath(root)
-        _read = mode.startswith("r")
-        _write = mode != "r"
-        _overwrite = mode == "w+"
-
-        if new_root is not None:
-            if _write:
-                # Get folder names from components (typical wflow folders)
-                folders = ["staticgeoms", "staticmaps", "instate", "outstate"]
-                # Also check if components define folders
-                for comp in self.components.values():
-                    if hasattr(comp, "_FOLDERS"):
-                        folders.extend(comp._FOLDERS)
-                    elif hasattr(comp, "folder"):
-                        folders.append(comp.folder)
-
-                folders = list(set(folders))  # Remove duplicates
-
-                for name in folders:
-                    path = join(new_root, name)
-                    if not isdir(path):
-                        os.makedirs(path, exist_ok=True)
-                        continue
-
-                    # path already exists check files
-                    fns = glob.glob(join(path, "*.*"))
-                    exts = set([os.path.splitext(fn)[1] for fn in fns])
-                    exts -= ignore_ext
-
-                    if len(exts) != 0:
-                        if mode.endswith("+"):
-                            logger.warning(
-                                "Model dir already exists and "
-                                f"files might be overwritten: {path}."
-                            )
-                        else:
-                            msg = (
-                                "Model dir already exists and cannot be "
-                                + f"overwritten: {path}. Use 'mode=w+' to force "
-                                + "overwrite existing files."
-                            )
-                            logger.error(msg)
-                            raise IOError(msg)
-
-            # check directory
-            elif not isdir(new_root):
-                raise IOError(f'model root not found at "{new_root}"')
-
-        # Update the root by creating a new ModelRoot instance
-        self.root = ModelRoot(new_root, mode=mode)
+        self.staticmaps.set(ds_lulc_maps.rename(rename_dict))
+        # Add entries to the config
+        self._update_config_variable_name(ds_lulc_maps.rename(rename_dict).data_vars)

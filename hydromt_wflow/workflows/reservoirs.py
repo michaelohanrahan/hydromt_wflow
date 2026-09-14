@@ -2,7 +2,6 @@
 
 import json
 import logging
-from os.path import join
 from pathlib import Path
 
 import geopandas as gpd
@@ -206,8 +205,8 @@ def reservoir_id_maps(
 def reservoir_simple_control_parameters(
     gdf: gpd.GeoDataFrame,
     ds_reservoirs: xr.Dataset,
-    timeseries_fn: str = None,
-    output_folder: str | Path | None = None,
+    timeseries_fn: str | None = None,
+    output_folder: Path | None = None,
 ) -> tuple[xr.Dataset, gpd.GeoDataFrame]:
     """Return reservoir attributes (see list below) needed for modelling.
 
@@ -244,7 +243,7 @@ using gwwapi and 2. JRC (Peker, 2016) using hydroengine.
         will be retrieved.
         Currently available: ['jrc', 'gww']
         Defaults to Deltares' Global Water Watch database.
-    output_folder: str or Path, optional
+    output_folder: Path, optional
         Folder to save the reservoir time series data and parameter accuracy as .csv
         files. If None, no file will be saved.
 
@@ -290,10 +289,10 @@ using gwwapi and 2. JRC (Peker, 2016) using hydroengine.
 
 def compute_reservoir_simple_control_parameters(
     gdf: gpd.GeoDataFrame,
-    timeseries_fn: str = None,
+    timeseries_fn: str | None = None,
     perc_norm: int = 50,
     perc_min: int = 20,
-    output_folder: str | Path | None = None,
+    output_folder: Path | None = None,
 ) -> pd.DataFrame:
     """Return reservoir attributes (see list below) needed for modelling.
 
@@ -332,7 +331,7 @@ using gwwapi and 2. JRC (Peker, 2016) using hydroengine.
         Percentile for normal (operational) surface area
     perc_min: int, optional
         Percentile for minimal (operational) surface area
-    output_folder: str or Path, optional
+    output_folder: Path, optional
         Folder to save the reservoir time series data and parameter accuracy as .csv
         files. If None, no file will be saved.
 
@@ -700,8 +699,10 @@ please use one of [gww, jrc] or None."
 
     # Save accuracy information on reservoir parameters
     if output_folder is not None:
-        df_plot.to_csv(join(output_folder, "reservoir_accuracy.csv"))
-        df_ts.to_csv(join(output_folder, f"reservoir_timeseries_{timeseries_fn}.csv"))
+        output_folder.mkdir(parents=True, exist_ok=True)
+        df_plot.to_csv(output_folder / "reservoir_accuracy.csv")
+        if timeseries_fn is not None:
+            df_ts.to_csv(output_folder / f"reservoir_timeseries_{timeseries_fn}.csv")
 
     return df_out
 
@@ -797,7 +798,8 @@ def reservoir_parameters(
                 if "volume" in df_rate.columns:
                     gdf.loc[gdf["waterbody_id"] == wid, "reservoir_storage_curve"] = 2
                     df_stor = df_rate[["elevtn", "volume"]].dropna(
-                        subset=["elevtn", "volume"]
+                        subset=["elevtn", "volume"],
+                        ignore_index=True,
                     )
                     df_stor.rename(columns={"elevtn": "H", "volume": "S"}, inplace=True)
                     # add to rating_curves
@@ -811,7 +813,8 @@ def reservoir_parameters(
                 if "discharge" in df_rate.columns:
                     gdf.loc[gdf["waterbody_id"] == wid, "reservoir_rating_curve"] = 1
                     df_rate = df_rate[["elevtn", "discharge"]].dropna(
-                        subset=["elevtn", "discharge"]
+                        subset=["elevtn", "discharge"],
+                        ignore_index=True,
                     )
                     df_rate.rename(
                         columns={"elevtn": "H", "discharge": "Q"},
@@ -945,17 +948,23 @@ def merge_reservoirs(
             mask = ds[id_layer] > 0
 
         # if layer is not in ds, skip it
-        # NaN can be ok: e.g. natural lake does not have reservoir_demand
+        # NaN are not ok - use -1: e.g. natural lake does not have reservoir_demand
         if layer not in ds and layer in ds_like:
-            ds_out[layer] = ds_like[layer]
+            ds_out[layer] = ds_like[layer].where(~mask, -1)
 
-        # if layer is in ds_like, merge it
-        if layer in ds and layer in ds_like:
-            # merge the layer
-            ds_out[layer] = ds[layer].where(mask, ds_like[layer])
-            # ensure the nodata value is set correctly
-            ds_out[layer].raster.set_nodata(ds_like[layer].raster.nodata)
-        # else we just keep ds[layer] as it is
+        if layer in ds:
+            # if layer is in ds_like, merge it
+            if layer in ds_like:
+                # merge the layer
+                ds_out[layer] = ds[layer].where(mask, ds_like[layer])
+                # ensure the nodata value is set correctly
+                ds_out[layer].raster.set_nodata(ds_like[layer].raster.nodata)
+
+            # else update ds[layer] to add -1 for the new locs
+            else:
+                mask_ds_like = ds_like[id_layer] > 0
+                ds_out[layer] = ds[layer].where(~mask_ds_like, -1)
+
     ds_out = set_rating_curve_layer_data_type(ds_out)
     return _check_duplicated_ids_in_merge(ds_out, duplicate_id=duplicate_id)
 

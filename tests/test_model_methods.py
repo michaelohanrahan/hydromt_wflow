@@ -13,11 +13,33 @@ import xarray.testing as xrt
 from hydromt.data_catalog.sources import create_source
 from hydromt.gis import GeoDataset, full_like
 
-from hydromt_wflow import workflows
+from hydromt_wflow import DATA_DIR, workflows
 from hydromt_wflow.wflow_sbm import WflowSbmModel
+
+try:
+    import gwwapi  # noqa: F401
+
+    HAS_GWW_API = True
+except ImportError:
+    HAS_GWW_API = False
+
+try:
+    import hydroengine  # noqa: F401
+
+    HAS_HYDROENGINE = True
+except ImportError:
+    HAS_HYDROENGINE = False
+
+try:
+    import wradlib  # noqa: F401
+
+    HAS_WRADLIB = True
+except ImportError:
+    HAS_WRADLIB = False
 
 TESTDATADIR = join(dirname(abspath(__file__)), "data")
 EXAMPLEDIR = join(dirname(abspath(__file__)), "..", "examples")
+pytestmark = pytest.mark.integration  # all tests in this module are integration tests
 
 
 def test_setup_basemaps(tmpdir: Path):
@@ -68,9 +90,6 @@ def test_setup_basemaps(tmpdir: Path):
     )
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
 def test_setup_grid(example_wflow_model):
     # Tests on setup_grid_from_raster
     example_wflow_model.setup_grid_from_raster(
@@ -288,19 +307,34 @@ def test_setup_reservoirs_no_control(
     example_wflow_model.tables.write()
 
     test_table = example_wflow_model.tables.data[f"reservoir_sh_{lake_id}"]
+    test_table_hq = example_wflow_model.tables.data[f"reservoir_hq_{lake_id}"]
 
     example_wflow_model.tables.data.clear()
     example_wflow_model.root.set(new_root, mode="r")
     example_wflow_model.tables.read()
+    tables_data = example_wflow_model.tables.data
 
-    assert example_wflow_model.tables.data[f"reservoir_sh_{lake_id}"].equals(test_table)
+    assert tables_data[f"reservoir_sh_{lake_id}"].equals(test_table)
+    assert tables_data[f"reservoir_hq_{lake_id}"].equals(test_table_hq)
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
+test_reservoirs_simple_control_sources = [
+    pytest.param(
+        "gww",
+        marks=pytest.mark.skipif(not HAS_GWW_API, reason="gwwapi not installed"),
+    ),
+    pytest.param(
+        "jrc",
+        marks=pytest.mark.skipif(
+            not HAS_HYDROENGINE, reason="hydroengine not installed"
+        ),
+    ),
+]
+
+
 @pytest.mark.timeout(120)  # max 2 min
-@pytest.mark.parametrize("source", ["gww", "jrc"])
+@pytest.mark.integration
+@pytest.mark.parametrize("source", test_reservoirs_simple_control_sources)
 def test_reservoirs_simple_control(source, tmpdir, example_wflow_model):
     # Read model 'wflow_piave_subbasin' from EXAMPLEDIR
     model = "wflow"
@@ -315,7 +349,7 @@ def test_reservoirs_simple_control(source, tmpdir, example_wflow_model):
             "reservoirs_fn": "hydro_reservoirs",
             "timeseries_fn": source,
             "min_area": 0.0,
-            "update_existing": False,
+            "overwrite_existing": False,
         }
     }
 
@@ -367,9 +401,6 @@ number of reservoirs in model area"
         )
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
 def test_setup_ksathorfrac(tmpdir, example_wflow_model):
     # Read the modeldata
     model = "wflow"
@@ -400,9 +431,6 @@ def test_setup_ksathorfrac(tmpdir, example_wflow_model):
     assert np.isclose(mean_val, 220.206)
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
 def test_setup_ksatver_vegetation(example_wflow_model):
     # Build the soil_ksat_vertical vegetation map
     example_wflow_model.setup_ksatver_vegetation(
@@ -472,14 +500,11 @@ def test_setup_lai(example_wflow_model: WflowSbmModel):
 
     assert "lai_from_vito_mapping" in example_wflow_model.staticmaps.data
     assert (
-        example_wflow_model.config.get_value("input.cyclic.vegetation__leaf-area_index")
+        example_wflow_model.config.get_value("input.cyclic.vegetation__leaf_area_index")
         == "lai_from_vito_mapping"
     )
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
 def test_setup_rootzoneclim(example_wflow_model):
     # load csv with dummy data for long timeseries of precip, pet and dummy Q data.
     test_data = pd.read_csv(
@@ -607,18 +632,15 @@ def test_setup_rootzoneclim(example_wflow_model):
 
     assert example_wflow_model.geoms.get("rootzone_storage").loc[1][
         "rootzone_storage_obs_2"
-    ] == pytest.approx(82.85684577620462, abs=0.5)
+    ] == pytest.approx(83.73380337309179, abs=0.5)
     assert example_wflow_model.geoms.get("rootzone_storage").loc[1][
         "rootzone_storage_cc_hist_2"
-    ] == pytest.approx(82.44039441508069, abs=0.5)
+    ] == pytest.approx(83.46095605283114, abs=0.5)
     assert example_wflow_model.geoms.get("rootzone_storage").loc[1][
         "rootzone_storage_cc_fut_2"
-    ] == pytest.approx(106.03809681174451, abs=0.5)
+    ] == pytest.approx(107.12276256619255, abs=0.5)
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
 def test_setup_outlets(example_wflow_model):
     # Update subcatchment ID
     new_subcatch = example_wflow_model.staticmaps.data["subcatchment"].copy()
@@ -751,9 +773,6 @@ def test_setup_gauges(example_wflow_model: WflowSbmModel):
     assert len(test_stations_gdf) == 3
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
 @pytest.mark.parametrize("elevtn_map", ["land_elevation", "meta_subgrid_elevation"])
 def test_setup_rivers(elevtn_map, floodplain1d_testdata, example_wflow_model):
     example_wflow_model.setup_rivers(
@@ -788,6 +807,47 @@ def test_setup_rivers(elevtn_map, floodplain1d_testdata, example_wflow_model):
         .raster.mask_nodata()
         .equals(floodplain1d_testdata[mapname])
     )
+
+
+def test_setup_rivers_no_subgrid(tmpdir: Path):
+    # Instantiate new wflow model
+    # Region
+    region = {
+        "subbasin": [12.5032, 46.5327],
+        "strord": 4,
+        "bounds": [11.70, 45.35, 12.95, 46.70],
+    }
+    mod = WflowSbmModel(
+        root=str(tmpdir.join("river_no_subgrid")),
+        mode="w",
+        data_libs=["artifact_data"],
+    )
+    hydrography = mod.data_catalog.get_rasterdataset("merit_hydro_ihu")
+    # Run setup_basemaps
+    mod.setup_basemaps(
+        region=region,
+        hydrography_fn=hydrography.copy(),
+        res=hydrography.raster.res[0],  # no upscaling
+    )
+
+    assert "x_out" not in mod.staticmaps.data
+
+    # Setup rivers with different hydrography (with subgrid = false)
+    with pytest.raises(ValueError, match="It seems model grid was not upscaled"):
+        mod.setup_rivers(
+            hydrography_fn="merit_hydro",
+            river_geom_fn="hydro_rivers_lin",
+            river_upa=30,
+        )
+
+    # Now with correct hydrography
+    mod.setup_rivers(
+        hydrography_fn="merit_hydro_ihu",
+        river_geom_fn="hydro_rivers_lin",
+        river_upa=30,
+    )
+
+    assert "river_mask" in mod.staticmaps.data
 
 
 def test_setup_rivers_depth(tmpdir: Path):
@@ -913,9 +973,6 @@ def test_setup_floodplains_1d(
     )
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
 @pytest.mark.parametrize("elevtn_map", ["land_elevation", "meta_subgrid_elevation"])
 def test_setup_floodplains_2d(
     elevtn_map, example_wflow_model: WflowSbmModel, floodplain1d_testdata
@@ -978,9 +1035,7 @@ def test_setup_floodplains_2d(
     )
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
+@pytest.mark.skipif(not HAS_WRADLIB, reason="wradlib not installed")
 def test_setup_precip_from_point_timeseries(
     example_wflow_model: WflowSbmModel, df_precip_stations, gdf_precip_stations
 ):
@@ -1200,17 +1255,16 @@ def test_skip_nodata_reservoir(clipped_wflow_model: WflowSbmModel):
         )
 
 
-@pytest.mark.skip(
-    reason="Skip test until required hydromt-core v1 component(s) are implemented"
-)
 def test_setup_lulc_vector(
     example_wflow_model: WflowSbmModel,
     globcover_gdf,
 ):
     # Test for wflow sbm
+    # Use a file directly for lulc_mapping_fn
+    mapping_fn = DATA_DIR / "lulc" / "v0.8" / "globcover_mapping.csv"
     example_wflow_model.setup_lulcmaps_from_vector(
         lulc_fn=globcover_gdf,
-        lulc_mapping_fn="globcover_mapping_default",
+        lulc_mapping_fn=mapping_fn,
         lulc_res=0.0025,
         save_raster_lulc=False,
     )
@@ -1270,7 +1324,7 @@ def test_setup_lulc_paddy(example_wflow_model: WflowSbmModel, tmpdir: Path):
 
     # Test values for crop coefficient
     assert np.isclose(
-        ds["vegetation_crop_factor"].raster.mask_nodata().mean().values, 0.8869253
+        ds["vegetation_crop_factor"].raster.mask_nodata().mean().values, 1.05686426
     )
 
     # Test with a separate paddy_map
@@ -1515,7 +1569,7 @@ def test_setup_irrigation_nopaddy(
     )
 
     # There is no paddy in this region
-    assert ds["demand_nonpaddy_irrigated_mask"].raster.mask_nodata().sum().values == 5
+    assert ds["demand_nonpaddy_irrigated_mask"].raster.mask_nodata().sum().values == 4
     # Check if more irrigation is allowed during summer than winter
     assert (
         ds["demand_nonpaddy_irrigation_trigger"]

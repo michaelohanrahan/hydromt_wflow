@@ -130,6 +130,14 @@ def _convert_to_wflow_v1(
     config_out: dict
         The converted config.
     """
+    if config["model"].get("reinit") == False:
+        logger.warning(
+            "Converting states is not supported by this conversion code, therefore the "
+            "reinit option (new name cold_start__flag) is adjusted to True. If model "
+            "states are required, please produce new states using a Wflow simulation or"
+            " use the setup_cold_states function."
+        )
+        config["model"]["reinit"] = True
     WFLOW_CONVERSION = _create_v0_to_v1_var_mapping(wflow_vars)
     for k, v in states_vars.items():
         WFLOW_CONVERSION[v["wflow_v0"]] = v["wflow_v1"]
@@ -235,6 +243,13 @@ def _convert_to_wflow_v1(
     cyclic_variables = []
     forcing_variables = []
 
+    reservoir_locs = []
+    if get_config(config, "input.lateral.river.reservoir.locs") is not None:
+        reservoir_locs.append(get_config(config, "input.lateral.river.reservoir.locs"))
+    if get_config(config, "input.lateral.river.lake.locs") is not None:
+        reservoir_locs.append(get_config(config, "input.lateral.river.lake.locs"))
+    reservoir_locs_map = []
+
     config_out["input"] = {}
     for key, name in config["input"].items():
         if key in input_options.keys():
@@ -244,7 +259,11 @@ def _convert_to_wflow_v1(
         elif key == "cyclic":
             cyclic_variables = name
         elif key not in ["vertical", "lateral"]:  # variables are done separately
-            config_out["input"][key] = name
+            # For reservoir / lake locations map, skip
+            if name in reservoir_locs:
+                reservoir_locs_map.append(key)
+            else:
+                config_out["input"][key] = name
 
     # Go through the input variables
     config_out["input"]["forcing"] = {}
@@ -309,6 +328,9 @@ def _convert_to_wflow_v1(
         "lateral.river.lake.locs": "reservoir_location__count",
         "lateral.river.reservoir.locs": "reservoir_location__count",
     }
+    # Add the reservoir maps that were potentially in the input section
+    for var in reservoir_locs_map:
+        map_variable_conversions[var] = "reservoir_location__count"
 
     if get_config(key="netcdf", config=config, fallback=None) is not None:
         if "output" not in config_out:
@@ -396,8 +418,19 @@ def convert_to_wflow_v1_sbm(config: dict) -> dict:
         "lateral.river.floodplain.volume": "floodplain_water__volume",
         "lateral.river.reservoir.volume": "reservoir_water__volume",
         "lateral.river.reservoir.totaloutflow": "reservoir_water__outgoing_volume_flow_rate",  # noqa : E501
+        "lateral.river.reservoir.outflow": "reservoir_water__outgoing_volume_flow_rate",
+        "lateral.river.reservoir.inflow": "reservoir_water__incoming_volume_flow_rate",
+        "lateral.river.reservoir.precipitation": "reservoir_water__precipitation_volume_flux",  # noqa : E501
+        "lateral.river.reservoir.evaporation": "reservoir_water__potential_evaporation_volume_flux",  # noqa : E501
+        "lateral.river.reservoir.actevap": "reservoir_water__evaporation_volume_flux",
         "lateral.river.lake.storage": "reservoir_water__volume",
         "lateral.river.lake.totaloutflow": "reservoir_water__outgoing_volume_flow_rate",
+        "lateral.river.lake.outflow": "reservoir_water__outgoing_volume_flow_rate",
+        "lateral.river.lake.inflow": "reservoir_water__incoming_volume_flow_rate",
+        "lateral.river.lake.waterlevel": "reservoir_water_surface__elevation",
+        "lateral.river.lake.precipitation": "reservoir_water__precipitation_volume_flux",  # noqa : E501
+        "lateral.river.lake.evaporation": "reservoir_water__potential_evaporation_volume_flux",  # noqa : E501
+        "lateral.river.lake.actevap": "reservoir_water__evaporation_volume_flux",
     }
 
     # Options in model section that were renamed
@@ -639,6 +672,7 @@ def convert_reservoirs_to_wflow_v1_sbm(
 
         # Update the config options
         for layer in reservoir_layers:
+            # layers that are in "main" input section
             if layer in [
                 "reservoir_area_id",
                 "reservoir_outlet_id",
@@ -646,7 +680,16 @@ def convert_reservoirs_to_wflow_v1_sbm(
             ]:
                 wflow_var_v1 = f"input.{WFLOW_NAMES[layer]['wflow_v1']}"
             else:
-                wflow_var_v1 = f"input.static.{WFLOW_NAMES[layer]['wflow_v1']}"
+                # Find if in cyclic / forcing / static
+                v0_var = WFLOW_NAMES[layer]["wflow_v0"]
+                if v0_var in get_config(config=config, key="input.cyclic", fallback=[]):
+                    wflow_var_v1 = f"input.cyclic.{WFLOW_NAMES[layer]['wflow_v1']}"
+                elif v0_var in get_config(
+                    config=config, key="input.forcing", fallback=[]
+                ):
+                    wflow_var_v1 = f"input.forcing.{WFLOW_NAMES[layer]['wflow_v1']}"
+                else:
+                    wflow_var_v1 = f"input.static.{WFLOW_NAMES[layer]['wflow_v1']}"
             config_options[wflow_var_v1] = layer
 
     # Move to the lake layers

@@ -1,9 +1,9 @@
 import argparse
-import os
+import platform
 import shutil
 from pathlib import Path
 
-from hydromt.io.readers import read_workflow_yaml
+from hydromt.readers import read_workflow_yaml
 
 from hydromt_wflow import WflowSbmModel, WflowSedimentModel
 
@@ -24,6 +24,9 @@ def build_model(
 ) -> None:
     """Build example Wflow SBM model."""
     param_path = repo_root / "hydromt_wflow" / "data" / "parameters_data.yml"
+
+    # Remove existing staticmaps.nc files in model root
+    remove_files([model_root / "staticmaps.nc"])
 
     mod = model(
         root=model_root.as_posix(),
@@ -52,7 +55,7 @@ def clip_model(examples_dir: Path) -> None:
         mode="r",
     )
     model.read()
-    model.set_root(destination.as_posix(), mode="w")
+    model.root.set(destination.as_posix(), mode="w")
     model.clip(region)
     model.write()
 
@@ -67,10 +70,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     repo_root = Path(__file__).parent.parent
-    if os.name == "posix":
+    if platform.system() == "Linux":
         examples_dir = repo_root / "examples" / "linux64"
-    else:
+    elif platform.system() == "Windows":
         examples_dir = repo_root / "examples"
+    else:
+        raise ValueError(
+            f"Unsupported platform for example models: {platform.system()}"
+        )
 
     models = {
         "sbm": {
